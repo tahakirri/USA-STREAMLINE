@@ -58,11 +58,17 @@ def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
     return ticket_mistakes
 
-# Function to refresh data
+# Function to refresh data (Ensures headers are kept intact)
 def refresh_data():
+    global data
+    if os.path.exists(DATA_FILE):
+        data = pd.read_csv(DATA_FILE)  # Reload the data to ensure headers are intact
     return data
 
 def refresh_ticket_mistakes():
+    global ticket_mistakes
+    if os.path.exists(TICKET_MISTAKES_FILE):
+        ticket_mistakes = pd.read_csv(TICKET_MISTAKES_FILE)
     return ticket_mistakes
 
 # Initialize image storage
@@ -92,6 +98,7 @@ if tab == "Request":
         st.write(data.tail(1))
     
     if st.button("Refresh Data"):
+        data = refresh_data()  # Reload data to maintain headers
         st.write("Data Table:")
         for index, row in data.iterrows():
             col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 3, 2])
@@ -100,7 +107,7 @@ if tab == "Request":
             col3.write(row["ID"])
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
-            # No need to display or change the status anymore
+            # No status handling, just display data as is
 
 # HOLD Tab
 if tab == "HOLD":
