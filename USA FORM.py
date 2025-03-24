@@ -101,8 +101,14 @@ if tab == "Request":
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
             
+            # Ensure 'Completed' column exists before accessing
+            if "Completed" in row:
+                completed_value = row["Completed"]
+            else:
+                completed_value = "Not Done"  # Fallback to default value
+            
             # Dropdown for completion status instead of checkbox
-            completed = col6.selectbox("Status", ["Not Done", "Done"], index=0 if row["Completed"] == "Not Done" else 1, key=f"status_{index}")
+            completed = col6.selectbox("Status", ["Not Done", "Done"], index=0 if completed_value == "Not Done" else 1, key=f"status_{index}")
             
             # Update status if it changes
             if completed != row["Completed"]:
