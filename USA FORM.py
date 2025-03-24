@@ -30,7 +30,7 @@ def submit_data(agent_name, type_, id_, comment):
         "ID": id_,
         "COMMENT": comment,
         "Timestamp": datetime.now().strftime("%H:%M:%S"),
-        "Completed": False
+        "Completed": False  # Default value for "Completed"
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
@@ -94,15 +94,13 @@ if tab == "Request":
     if st.button("Refresh Data"):
         st.write("Data Table:")
         for index, row in data.iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
+            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 3, 2])
             col1.write(row["Agent Name"])
             col2.write(row["TYPE"])
             col3.write(row["ID"])
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
-            completed = col6.checkbox("Done", row["Completed"], key=index)
-            if completed != row["Completed"]:
-                update_completion(index)
+            # No need to display or change the status anymore
 
 # HOLD Tab
 if tab == "HOLD":
