@@ -30,7 +30,7 @@ def submit_data(agent_name, type_, id_, comment):
         "ID": id_,
         "COMMENT": comment,
         "Timestamp": datetime.now().strftime("%H:%M:%S"),
-        "Completed": "Not Done"  # Default value
+        "Completed": False
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
@@ -38,9 +38,9 @@ def submit_data(agent_name, type_, id_, comment):
     return data
 
 # Function to update the completed status
-def update_completion(index, completed_status):
+def update_completion(index):
     global data
-    data.at[index, "Completed"] = completed_status
+    data.at[index, "Completed"] = not data.at[index, "Completed"]
     data.to_csv(DATA_FILE, index=False)
 
 # Function to submit ticket mistakes data
@@ -100,19 +100,9 @@ if tab == "Request":
             col3.write(row["ID"])
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
-            
-            # Ensure 'Completed' column exists before accessing
-            if "Completed" in row:
-                completed_value = row["Completed"]
-            else:
-                completed_value = "Not Done"  # Fallback to default value
-            
-            # Dropdown for completion status instead of checkbox
-            completed = col6.selectbox("Status", ["Not Done", "Done"], index=0 if completed_value == "Not Done" else 1, key=f"status_{index}")
-            
-            # Update status if it changes
+            completed = col6.checkbox("Done", row["Completed"], key=index)
             if completed != row["Completed"]:
-                update_completion(index, completed)
+                update_completion(index)
 
 # HOLD Tab
 if tab == "HOLD":
