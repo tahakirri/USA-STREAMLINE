@@ -12,7 +12,7 @@ TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
 else:
-    columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
+    columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp", "Completed"]
     data = pd.DataFrame(columns=columns)
 
 if os.path.exists(TICKET_MISTAKES_FILE):
@@ -29,12 +29,19 @@ def submit_data(agent_name, type_, id_, comment):
         "TYPE": type_,
         "ID": id_,
         "COMMENT": comment,
-        "Timestamp": datetime.now().strftime("%H:%M:%S")
+        "Timestamp": datetime.now().strftime("%H:%M:%S"),
+        "Completed": False
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
     return data
+
+# Function to update the completed status
+def update_completion(index):
+    global data
+    data.at[index, "Completed"] = not data.at[index, "Completed"]
+    data.to_csv(DATA_FILE, index=False)
 
 # Function to submit ticket mistakes data
 def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
@@ -86,7 +93,16 @@ if tab == "Request":
     
     if st.button("Refresh Data"):
         st.write("Data Table:")
-        st.write(refresh_data())
+        for index, row in data.iterrows():
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
+            col1.write(row["Agent Name"])
+            col2.write(row["TYPE"])
+            col3.write(row["ID"])
+            col4.write(row["COMMENT"])
+            col5.write(row["Timestamp"])
+            completed = col6.checkbox("Done", row["Completed"], key=index)
+            if completed != row["Completed"]:
+                update_completion(index)
 
 # HOLD Tab
 if tab == "HOLD":
