@@ -1,115 +1,122 @@
 import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
+from PIL import Image
+import os
 
-# Path to your Firebase JSON key
-key_path = r"C:\Users\Taha\Downloads\usa-form-360ea-firebase-adminsdk-fbsvc-742a7301b4.json"
+# Define the path to the CSV file where the data will be stored
+DATA_FILE = 'shared_data.csv'
+TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
 
-# Initialize Firebase app (only if not already initialized)
-if not firebase_admin._apps:
-    cred = credentials.Certificate(key_path)
-    firebase_admin.initialize_app(cred)
+# Load the data from the CSV file if it exists
+if os.path.exists(DATA_FILE):
+    data = pd.read_csv(DATA_FILE)
+else:
+    columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
+    data = pd.DataFrame(columns=columns)
 
-# Firestore client
-db = firestore.client()
+if os.path.exists(TICKET_MISTAKES_FILE):
+    ticket_mistakes = pd.read_csv(TICKET_MISTAKES_FILE)
+else:
+    mistake_columns = ["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"]
+    ticket_mistakes = pd.DataFrame(columns=mistake_columns)
 
-# Initialize an empty DataFrame to store the data (for the session)
-columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
-data = pd.DataFrame(columns=columns)
-
-# Function to submit data to Firestore
+# Function to submit request data
 def submit_data(agent_name, type_, id_, comment):
     global data
-    
-    # Add the new data with timestamp
     new_data = {
         "Agent Name": agent_name,
         "TYPE": type_,
         "ID": id_,
         "COMMENT": comment,
-        "Timestamp": datetime.now().strftime("%H:%M:%S")  # Only time (hour:minute:second)
+        "Timestamp": datetime.now().strftime("%H:%M:%S")
     }
-
-    # Add to Firestore collection
-    db.collection('form_data').add(new_data)
-
-    # Add to local DataFrame for display
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
-
+    data.to_csv(DATA_FILE, index=False)
     return data
 
-# Function to refresh the data from Firestore
+# Function to submit ticket mistakes data
+def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
+    global ticket_mistakes
+    new_mistake = {
+        "Team Leader Name": team_leader,
+        "Agent Name": agent_name,
+        "Ticket ID": ticket_id,
+        "Error": error,
+        "Timestamp": datetime.now().strftime("%H:%M:%S")
+    }
+    new_row = pd.DataFrame([new_mistake])
+    ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
+    ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
+    return ticket_mistakes
+
+# Function to refresh data
 def refresh_data():
-    # Get all documents from Firestore
-    docs = db.collection('form_data').stream()
-    firestore_data = []
-    for doc in docs:
-        firestore_data.append(doc.to_dict())
+    return data
 
-    # Convert to DataFrame
-    firestore_df = pd.DataFrame(firestore_data)
-    return firestore_df
+def refresh_ticket_mistakes():
+    return ticket_mistakes
 
-# Function to upload an image
-def upload_image(image):
-    # This function can be extended to upload images to Firestore or a storage service
-    # Currently it just returns the image object
-    return image
-
-# Function to check the latest uploaded image
-def check_hold():
-    return image_storage.get("image", "No image uploaded yet.")
-
-# Initialize image storage (for the hold section)
+# Initialize image storage
 image_storage = {"image": None}
 
-# Streamlit UI
-st.title("USA Collab Form")
+def check_hold():
+    return image_storage["image"]
+
+# Streamlit interface
+st.title("USA Collab")
 
 # Tabs
-tab = st.sidebar.radio("Select Tab", ["Request", "HOLD"])
+tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"])
 
+# Request Tab
 if tab == "Request":
     st.header("Request Section")
-
-    # Input fields for Agent Name, Type, ID, Comment
-    agent_name_input = st.text_input("Agent Name", placeholder="Enter Agent Name")
+    agent_name_input = st.text_input("Agent Name")
     type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
-    id_input = st.text_input("ID", placeholder="Enter ID")
-    comment_input = st.text_area("Comment", placeholder="Enter Comment")
-
-    # Buttons
-    submit_button = st.button("Submit Data")
-    refresh_button = st.button("Refresh Data")
-
-    # Output Dataframe
-    if submit_button:
+    id_input = st.text_input("ID")
+    comment_input = st.text_area("Comment")
+    
+    if st.button("Submit Data"):
         data = submit_data(agent_name_input, type_input, id_input, comment_input)
-        st.dataframe(data)
+        st.write("Data Submitted!")
+        st.write("Latest Submitted Data:")
+        st.write(data.tail(1))
+    
+    if st.button("Refresh Data"):
+        st.write("Data Table:")
+        st.write(refresh_data())
 
-    if refresh_button:
-        refreshed_data = refresh_data()
-        st.dataframe(refreshed_data)
-
-elif tab == "HOLD":
+# HOLD Tab
+if tab == "HOLD":
     st.header("HOLD Section")
-
-    # Image upload
-    image_input = st.file_uploader("Upload Image (HOLD Section)", type=["png", "jpg", "jpeg"])
-
-    if image_input:
-        image_storage["image"] = image_input
-        st.image(image_input, caption="Uploaded Image")
-
-    # Check hold button
-    if st.button("Check Latest Image"):
-        image = check_hold()
-        if isinstance(image, str):
-            st.write(image)
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
+    
+    if uploaded_image:
+        image_storage["image"] = Image.open(uploaded_image)
+        st.image(image_storage["image"], caption="Uploaded Image", use_column_width=True)
+    
+    if st.button("CHECK HOLD"):
+        if image_storage["image"] is not None:
+            st.image(image_storage["image"], caption="Latest Uploaded Image", use_column_width=True)
         else:
-            st.image(image, caption="Latest Uploaded Image")
+            st.write("No image uploaded.")
 
-# Firebase Firestore functionality
+# Ticket Mistakes Tab
+if tab == "Ticket Mistakes":
+    st.header("Ticket Mistakes Section")
+    team_leader_input = st.text_input("Team Leader Name")
+    agent_name_mistake_input = st.text_input("Agent Name")
+    ticket_id_input = st.text_input("Ticket ID")
+    error_input = st.text_area("Error")
+    
+    if st.button("Submit Mistake"):
+        ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
+        st.write("Mistake Submitted!")
+        st.write("Latest Submitted Mistake:")
+        st.write(ticket_mistakes.tail(1))
+    
+    if st.button("Refresh Mistakes"):
+        st.write("Mistakes Table:")
+        st.write(refresh_ticket_mistakes())
