@@ -98,14 +98,13 @@ if tab == "Request":
         st.write("Data Table:")
         st.write(refresh_data())
     
-    if st.button("Clear Data"):
-        password_input = st.text_input("Enter password to clear data", type="password")
-        if password_input:
-            message = clear_request_data(password_input)
-            st.write(message)
-            if message == "Data cleared successfully!":
-                st.write("Data Table:")
-                st.write(refresh_data())
+    password_input = st.text_input("Enter password to clear data", type="password")
+    if password_input:
+        message = clear_request_data(password_input)
+        st.write(message)
+        if message == "Data cleared successfully!":
+            st.write("Data Table:")
+            st.write(refresh_data())
 
 # HOLD Tab
 if tab == "HOLD":
