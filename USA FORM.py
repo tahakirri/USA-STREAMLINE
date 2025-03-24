@@ -36,16 +36,6 @@ def submit_data(agent_name, type_, id_, comment):
     data.to_csv(DATA_FILE, index=False)
     return data
 
-# Function to clear request data with password protection
-def clear_request_data(password):
-    global data
-    if password == "fish":
-        data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
-        data.to_csv(DATA_FILE, index=False)
-        return "Data cleared successfully!"
-    else:
-        return "Incorrect password!"
-
 # Function to submit ticket mistakes data
 def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     global ticket_mistakes
@@ -97,14 +87,6 @@ if tab == "Request":
     if st.button("Refresh Data"):
         st.write("Data Table:")
         st.write(refresh_data())
-    
-    password_input = st.text_input("Enter password to clear data", type="password")
-    if password_input:
-        message = clear_request_data(password_input)
-        st.write(message)
-        if message == "Data cleared successfully!":
-            st.write("Data Table:")
-            st.write(refresh_data())
 
 # HOLD Tab
 if tab == "HOLD":
