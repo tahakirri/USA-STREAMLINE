@@ -17,8 +17,6 @@ else:
 
 # Streamlit interface settings
 st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and layout
-st.title("USA Collab")
-st.markdown("<hr>", unsafe_allow_html=True)
 
 # Sidebar for navigation
 with st.sidebar:
@@ -26,28 +24,23 @@ with st.sidebar:
     st.markdown("### Navigation")
     section = st.radio("Choose Section", ["Request", "HOLD", "Ticket Mistakes"])
 
-    # Dark Mode / Light Mode Toggle
-    dark_mode = st.checkbox("Dark Mode", value=False)
-    if dark_mode:
-        st.markdown("""
-            <style>
-                body { background-color: #1e1e1e; color: white; }
-                .stButton>button { background-color: #333; color: white; }
-                .stDataFrame { background-color: #333; color: white; }
-                .stTextInput, .stSelectbox, .stTextArea { background-color: #444; color: white; }
-                .css-1j7c2tb { color: white; }
-            </style>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-            <style>
-                body { background-color: #f0f0f0; color: black; }
-                .stButton>button { background-color: #0073e6; color: white; }
-                .stDataFrame { background-color: white; color: black; }
-                .stTextInput, .stSelectbox, .stTextArea { background-color: white; color: black; }
-                .css-1j7c2tb { color: black; }
-            </style>
-        """, unsafe_allow_html=True)
+# Main Title
+st.title("USA Collab")
+st.markdown("<hr>", unsafe_allow_html=True)
+
+# Custom Styling
+st.markdown("""
+    <style>
+        body { background-color: #f0f0f0; color: black; }
+        .stButton>button { background-color: #0073e6; color: white; border-radius: 8px; padding: 10px 20px; }
+        .stButton>button:hover { background-color: #005bb5; }
+        .stDataFrame { background-color: white; color: black; border-radius: 10px; }
+        .stTextInput, .stSelectbox, .stTextArea { background-color: white; color: black; border-radius: 8px; padding: 10px; }
+        .css-1j7c2tb { color: black; font-size: 36px; font-weight: bold; text-align: center; }
+        .stRadio, .stSelectbox, .stTextInput, .stTextArea { font-size: 16px; }
+        .css-1v3fvcr { padding: 20px; }
+    </style>
+""", unsafe_allow_html=True)
 
 # Request Tab
 if section == "Request":
@@ -87,7 +80,7 @@ if section == "Request":
 
     if refresh_button:
         st.write("Latest Submitted Data:")
-        st.dataframe(data)  # Display the data without the additional styling (removing color formatting)
+        st.dataframe(data)  # Display the data without the additional styling
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
