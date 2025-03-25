@@ -59,6 +59,50 @@ def refresh_data():
 def refresh_ticket_mistakes():
     return ticket_mistakes
 
+# Light/Dark mode toggle
+def set_page_theme():
+    theme = st.radio("Choose Theme", ["Light", "Dark"], index=1)
+    
+    if theme == "Dark":
+        st.markdown(
+            """
+            <style>
+            body {
+                background-color: #333333;
+                color: white;
+            }
+            .sidebar .sidebar-content {
+                background-color: #1E1E1E;
+            }
+            .css-1aumxhk {
+                color: white;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <style>
+            body {
+                background-color: #ffffff;
+                color: black;
+            }
+            .sidebar .sidebar-content {
+                background-color: #f0f2f6;
+            }
+            .css-1aumxhk {
+                color: black;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+# Set the page layout and theme
+set_page_theme()
+
 # Streamlit interface
 st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and layout
 
