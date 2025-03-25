@@ -64,7 +64,8 @@ def get_requests():
     return requests
 
 # Streamlit UI
-st.title("Request Management System")
+st.set_page_config(page_title="Request Management System", layout="wide", initial_sidebar_state="expanded")
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.role = None
@@ -84,10 +85,9 @@ if not st.session_state.authenticated:
         else:
             st.error("Invalid credentials")
 else:
-    st.success(f"Logged in as {st.session_state.username} ({st.session_state.role})")
-    
-    # Sidebar Navigation
-    section = st.sidebar.radio("Navigation", ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes", "⚙ Admin Panel" if st.session_state.role == "admin" else ""])
+    with st.sidebar:
+        st.markdown(f"### Logged in as: {st.session_state.username}")
+        section = st.radio("Navigation", ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes", "⚙ Admin Panel" if st.session_state.role == "admin" else ""])
     
     if section == "📋 Request":
         st.subheader("Submit a Request")
@@ -97,19 +97,22 @@ else:
         if st.button("Submit Request"):
             add_request(st.session_state.username, request_type, identifier, comment)
             st.success("Request submitted!")
-        
+
         st.subheader("Requests")
         requests = get_requests()
-        for req in requests:
-            st.write(req)
-    
+        if requests:
+            for req in requests:
+                st.write(req)
+        else:
+            st.write("No requests found.")
+
     elif section == "🖼️ HOLD":
         st.subheader("HOLD Section")
         uploaded_image = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
         if uploaded_image:
             st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
             st.success("Image uploaded successfully!")
-    
+
     elif section == "❌ Ticket Mistakes":
         st.subheader("Ticket Mistakes Section")
         team_leader = st.text_input("Team Leader Name")
@@ -118,7 +121,7 @@ else:
         error_description = st.text_area("Error Description")
         if st.button("Submit Mistake"):
             st.success("Mistake submitted!")
-    
+
     elif section == "⚙ Admin Panel" and st.session_state.role == "admin":
         st.subheader("Admin Panel")
         if st.button("Clear All Requests"):
