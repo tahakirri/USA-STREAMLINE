@@ -84,8 +84,6 @@ if tab == "Request":
     
     # Buttons for submission and refresh
     submit_button = st.button("Submit Data")
-    refresh_button = st.button("Refresh Data")
-    clear_button = st.button("Clear Data")  # Clear Data Button
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -94,24 +92,8 @@ if tab == "Request":
         else:
             data = submit_data(agent_name_input, type_input, id_input, comment_input)
             st.success("Data Submitted!")
-    
-    if refresh_button:
-        st.write("Latest Submitted Data:")
-        st.write(data)  # Show the data table
-    
-    # Clear Data functionality with confirmation
-    if clear_button:
-        # Use st.radio or st.selectbox to confirm data deletion
-        confirm_clear = st.radio("Are you sure you want to delete all data?", ["No", "Yes"])
-        if confirm_clear == "Yes":
-            # Clear the data and save the empty DataFrame
-            data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
-            data.to_csv(DATA_FILE, index=False)  # Save the empty data to CSV
-            st.success("All data has been cleared!")
-            st.write("Latest Submitted Data:")  # Show that data is now empty
-            st.write(data)  # Display the empty DataFrame
-        elif confirm_clear == "No":
-            st.info("Data has not been cleared.")
+            st.write("Latest Submitted Data:")
+            st.write(data)  # Automatically display the refreshed data
     
     # Additional space for better layout
     st.markdown("---")
@@ -151,7 +133,6 @@ if tab == "Ticket Mistakes":
     
     # Buttons for submission and refresh
     submit_button = st.button("Submit Mistake")
-    refresh_button = st.button("Refresh Mistakes")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -160,10 +141,8 @@ if tab == "Ticket Mistakes":
         else:
             ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
             st.success("Mistake Submitted!")
-    
-    if refresh_button:
-        st.write("Mistakes Table:")
-        st.write(ticket_mistakes)  # Show the ticket mistakes table
+            st.write("Mistakes Table:")
+            st.write(ticket_mistakes)  # Automatically display the refreshed data
     
     # Additional space for better layout
     st.markdown("---")
