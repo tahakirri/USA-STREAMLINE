@@ -17,100 +17,101 @@ else:
 
 # Streamlit interface settings
 st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and layout
-
-# Sidebar for navigation
-with st.sidebar:
-    st.image('https://www.example.com/logo.png', width=100)  # Optionally add a logo
-    st.markdown("### Navigation")
-    section = st.radio("Choose Section", ["Request", "HOLD", "Ticket Mistakes"])
-
-# Main Title
 st.title("USA Collab")
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Custom Dark Mode Styling
+# Add custom CSS for styling
 st.markdown("""
     <style>
-        body {
-            background-color: #121212;
-            color: #E0E0E0;
+        /* Page title and header */
+        .css-1j7c2tb { 
+            font-size: 36px; 
+            font-weight: bold; 
+            text-align: center; 
+            color: #333;
         }
 
+        /* Section headers */
+        .css-16cv6of {
+            font-size: 28px;
+            font-weight: bold;
+            color: #0073e6;
+        }
+
+        /* Styling for columns */
+        .streamlit-expanderHeader {
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        /* Table styling */
+        .stDataFrame {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+        }
+
+        /* Buttons */
         .stButton>button {
-            background-color: #6200ea;
+            background-color: #0073e6;
             color: white;
             border-radius: 8px;
             padding: 10px 20px;
+            font-size: 16px;
         }
 
         .stButton>button:hover {
-            background-color: #3700b3;
+            background-color: #005bb5;
         }
 
-        .stDataFrame {
-            background-color: #333333;
-            color: #E0E0E0;
-            border-radius: 10px;
-            border: 1px solid #444444;
-        }
-
+        /* Input fields */
         .stTextInput, .stSelectbox, .stTextArea {
-            background-color: #333333;
-            color: white;
+            font-size: 16px;
             border-radius: 8px;
             padding: 10px;
-            border: 1px solid #444444;
         }
 
-        .stTextInput:focus, .stSelectbox:focus, .stTextArea:focus {
-            border-color: #6200ea;
+        /* Adjustments for images */
+        .stImage {
+            border-radius: 10px;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
         }
 
-        .stRadio>label {
+        /* Customizing section padding */
+        .css-1v3fvcr { padding: 20px; }
+
+        /* Sidebar styling */
+        .css-1lcbzgg {
+            background-color: #333;
             color: white;
-        }
-
-        .css-1j7c2tb {
-            color: #ffffff;
-            font-size: 36px;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        .css-16cv6of {
-            color: #6200ea;
-        }
-
-        .css-1v3fvcr {
             padding: 20px;
         }
 
-        .stFileUploader {
-            color: white;
-            border-radius: 8px;
-            background-color: #333333;
-        }
     </style>
 """, unsafe_allow_html=True)
+
+# Sidebar for navigation
+with st.sidebar:
+    st.markdown("### Navigation")
+    section = st.radio("Choose Section", ["Request", "HOLD", "Ticket Mistakes"])
 
 # Request Tab
 if section == "Request":
     st.header("Request Section")
     
-    # Layout with columns for better alignment (make all input fields the same height)
+    # Layout with columns for better alignment
     col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
-        agent_name_input = st.text_input("Agent Name", key="agent_name", max_chars=50)
+        agent_name_input = st.text_input("Agent Name", key="agent_name")
         type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
-        id_input = st.text_input("ID", key="id", max_chars=50)
+        id_input = st.text_input("ID", key="id")
     
     with col2:
-        comment_input = st.text_area("Comment", height=250, key="comment")  # Match the height with other inputs
+        comment_input = st.text_area("Comment", height=150, key="comment")
     
-    # Buttons for submission and refresh with emojis
-    submit_button = st.button("Submit Data ✅")
-    refresh_button = st.button("Refresh Data 🔄")
+    # Buttons for submission and refresh with improved styling
+    submit_button = st.button("Submit Data")
+    refresh_button = st.button("Refresh Data")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -131,7 +132,7 @@ if section == "Request":
 
     if refresh_button:
         st.write("Latest Submitted Data:")
-        st.dataframe(data)  # Display the data without the additional styling
+        st.dataframe(data)  # Display the data without the additional styling (removing color formatting)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -144,7 +145,7 @@ if section == "HOLD":
         image = Image.open(uploaded_image)
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    if st.button("CHECK HOLD 🔍"):
+    if st.button("CHECK HOLD"):
         if uploaded_image:
             st.image(image, caption="Latest Uploaded Image", use_column_width=True)
         else:
@@ -155,20 +156,20 @@ if section == "HOLD":
 if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
     
-    # Layout with columns for better alignment (make all input fields the same height)
+    # Layout with columns for better alignment
     col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
-        team_leader_input = st.text_input("Team Leader Name", key="team_leader", max_chars=50)
-        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake", max_chars=50)
-        ticket_id_input = st.text_input("Ticket ID", key="ticket_id", max_chars=50)
+        team_leader_input = st.text_input("Team Leader Name", key="team_leader")
+        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
+        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
     
     with col2:
-        error_input = st.text_area("Error", height=250, key="error")  # Match the height with other inputs
+        error_input = st.text_area("Error", height=150, key="error")
     
-    # Buttons for submission and refresh with emojis
-    submit_mistake_button = st.button("Submit Mistake ✅")
-    refresh_mistake_button = st.button("Refresh Mistakes 🔄")
+    # Buttons for submission and refresh with improved styling
+    submit_mistake_button = st.button("Submit Mistake")
+    refresh_mistake_button = st.button("Refresh Mistakes")
     
     if submit_mistake_button:
         # Ensure fields are filled out before submission
