@@ -4,15 +4,22 @@ from datetime import datetime
 import os
 from PIL import Image
 
-# Define separate CSV files for each section
+# Define CSV file paths
 REQUEST_FILE = 'request_data.csv'
 MISTAKE_FILE = 'mistake_data.csv'
 
-# Load request data
+# Load request data (with 'Completed' column)
 if os.path.exists(REQUEST_FILE):
     request_data = pd.read_csv(REQUEST_FILE)
 else:
-    request_data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
+    request_data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp", "Completed"])
+
+# Ensure 'Completed' column exists
+if "Completed" not in request_data.columns:
+    request_data["Completed"] = False  # Default to False
+
+# Convert 'Completed' column to boolean (fix dtype issues)
+request_data["Completed"] = request_data["Completed"].astype(bool)
 
 # Load mistake data
 if os.path.exists(MISTAKE_FILE):
@@ -20,7 +27,7 @@ if os.path.exists(MISTAKE_FILE):
 else:
     mistake_data = pd.DataFrame(columns=["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"])
 
-# Streamlit interface settings
+# Streamlit settings
 st.set_page_config(page_title="USA Collab", layout="wide")  
 st.title("USA Collab")
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -45,8 +52,7 @@ if section == "Request":
         comment_input = st.text_area("Comment", height=150, key="comment")  
     
     submit_button = st.button("Submit Data")
-    refresh_button = st.button("Refresh Data")
-    
+
     if submit_button:
         if not agent_name_input or not id_input or not comment_input:
             st.error("Please fill out all fields.")
@@ -56,16 +62,33 @@ if section == "Request":
                 "TYPE": type_input,
                 "ID": id_input,
                 "COMMENT": comment_input,
-                "Timestamp": datetime.now().strftime("%H:%M:%S")
+                "Timestamp": datetime.now().strftime("%H:%M:%S"),
+                "Completed": False  # Default to not completed
             }
             new_row = pd.DataFrame([new_data])
             request_data = pd.concat([request_data, new_row], ignore_index=True)
             request_data.to_csv(REQUEST_FILE, index=False)
             st.success("Data Submitted!")
+            st.experimental_rerun()  # Refresh page after submission
 
-    if refresh_button:
-        st.write("Latest Submitted Data:")
-        st.dataframe(request_data)
+    st.write("Latest Submitted Data:")
+
+    # Display requests with checkboxes
+    updated = False  # Track if any checkbox was changed
+    for i in range(len(request_data)):
+        col1, col2 = st.columns([0.1, 0.9])
+        with col1:
+            checked = st.checkbox(f"✅", value=request_data.loc[i, "Completed"], key=f"chk_{i}")
+            if checked != request_data.loc[i, "Completed"]:
+                request_data.at[i, "Completed"] = checked
+                updated = True  # Mark as updated
+        
+        with col2:
+            st.write(f"**{request_data.loc[i, 'Agent Name']}** - {request_data.loc[i, 'TYPE']} - {request_data.loc[i, 'ID']}")
+
+    # Save changes if any checkbox was updated
+    if updated:
+        request_data.to_csv(REQUEST_FILE, index=False)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -100,8 +123,7 @@ if section == "Ticket Mistakes":
         error_input = st.text_area("Error", height=150, key="error")
     
     submit_mistake_button = st.button("Submit Mistake")
-    refresh_mistake_button = st.button("Refresh Mistakes")
-    
+
     if submit_mistake_button:
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
             st.error("Please fill out all fields.")
@@ -118,8 +140,7 @@ if section == "Ticket Mistakes":
             mistake_data.to_csv(MISTAKE_FILE, index=False)
             st.success("Mistake Submitted!")
 
-    if refresh_mistake_button:
-        st.write("Mistakes Table:")
-        st.dataframe(mistake_data)
+    st.write("Mistakes Table:")
+    st.dataframe(mistake_data)
 
     st.markdown("<hr>", unsafe_allow_html=True)
