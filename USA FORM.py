@@ -101,13 +101,30 @@ if section == "📋 Request":
         comment_input = st.text_area("💬 Comment", height=150, key="comment")  
     
     # Side-by-side buttons
-    btn_col1, btn_col2 = st.columns(2)
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
     
     with btn_col1:
         submit_button = st.button("✅ Submit Data")
     
     with btn_col2:
         refresh_button = st.button("🔄 Refresh Data")
+    
+    with btn_col3:
+        clear_button = st.button("🗑️ Clear Data")
+    
+    # Clear data confirmation
+    if clear_button:
+        # Create a password input for confirmation
+        clear_password = st.text_input("🔐 Enter password to clear data:", type="password", key="clear_password")
+        
+        if clear_password:
+            if clear_password == "wipe":
+                # Clear only request data
+                request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
+                request_data.to_csv(REQUEST_FILE, index=False)
+                st.success("✅ Request data has been cleared successfully!")
+            else:
+                st.error("❌ Incorrect password. Data was not cleared.")
     
     if submit_button:
         if not agent_name_input or not id_input or not comment_input:
