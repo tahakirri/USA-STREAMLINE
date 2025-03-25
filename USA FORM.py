@@ -28,17 +28,68 @@ with st.sidebar:
 st.title("USA Collab")
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Custom Styling
+# Custom Dark Mode Styling
 st.markdown("""
     <style>
-        body { background-color: #f0f0f0; color: black; }
-        .stButton>button { background-color: #0073e6; color: white; border-radius: 8px; padding: 10px 20px; }
-        .stButton>button:hover { background-color: #005bb5; }
-        .stDataFrame { background-color: white; color: black; border-radius: 10px; }
-        .stTextInput, .stSelectbox, .stTextArea { background-color: white; color: black; border-radius: 8px; padding: 10px; }
-        .css-1j7c2tb { color: black; font-size: 36px; font-weight: bold; text-align: center; }
-        .stRadio, .stSelectbox, .stTextInput, .stTextArea { font-size: 16px; }
-        .css-1v3fvcr { padding: 20px; }
+        body {
+            background-color: #121212;
+            color: #E0E0E0;
+        }
+
+        .stButton>button {
+            background-color: #6200ea;
+            color: white;
+            border-radius: 8px;
+            padding: 10px 20px;
+        }
+
+        .stButton>button:hover {
+            background-color: #3700b3;
+        }
+
+        .stDataFrame {
+            background-color: #333333;
+            color: #E0E0E0;
+            border-radius: 10px;
+            border: 1px solid #444444;
+        }
+
+        .stTextInput, .stSelectbox, .stTextArea {
+            background-color: #333333;
+            color: white;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #444444;
+        }
+
+        .stTextInput:focus, .stSelectbox:focus, .stTextArea:focus {
+            border-color: #6200ea;
+        }
+
+        .stRadio>label {
+            color: white;
+        }
+
+        .css-1j7c2tb {
+            color: #ffffff;
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .css-16cv6of {
+            color: #6200ea;
+        }
+
+        .css-1v3fvcr {
+            padding: 20px;
+        }
+
+        .stFileUploader {
+            color: white;
+            border-radius: 8px;
+            background-color: #333333;
+        }
     </style>
 """, unsafe_allow_html=True)
 
