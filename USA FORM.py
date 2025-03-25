@@ -35,14 +35,12 @@ def submit_data(agent_name, type_, id_, comment):
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
-    st.experimental_rerun()  # Force real-time update
 
 # Function to update the completed status
 def update_completion(index):
     global data
     data.at[index, "Completed"] = not data.at[index, "Completed"]
     data.to_csv(DATA_FILE, index=False)
-    st.experimental_rerun()  # Force real-time update
 
 # Function to submit ticket mistakes data
 def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
@@ -57,7 +55,6 @@ def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     new_row = pd.DataFrame([new_mistake])
     ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
     ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
-    st.experimental_rerun()  # Force real-time update
 
 # Function to refresh data
 def refresh_data():
@@ -113,6 +110,7 @@ if tab == "Request":
             st.write("Data Submitted!")
             st.write("Latest Submitted Data:")
             st.write(data.tail(1))
+            st.experimental_rerun()  # Force real-time update after submission
     
     if st.button("Refresh Data"):
         st.write("Data Table:")
@@ -158,6 +156,7 @@ if tab == "Ticket Mistakes":
             st.write("Mistake Submitted!")
             st.write("Latest Submitted Mistake:")
             st.write(ticket_mistakes.tail(1))
+            st.experimental_rerun()  # Force real-time update after submission
     
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
