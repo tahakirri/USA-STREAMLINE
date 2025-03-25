@@ -100,14 +100,9 @@ if tab == "Request":
     if st.button("Refresh Data"):
         data = refresh_data()  # Reload data to maintain headers
         st.write("Data Table:")
-        for index, row in data.iterrows():
-            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 3, 2])
-            col1.write(row["Agent Name"])
-            col2.write(row["TYPE"])
-            col3.write(row["ID"])
-            col4.write(row["COMMENT"])
-            col5.write(row["Timestamp"])
-            # No status handling, just display data as is
+        
+        # Display data as a table in the same format as "Ticket Mistakes"
+        st.write(data)
 
 # HOLD Tab
 if tab == "HOLD":
