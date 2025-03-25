@@ -11,7 +11,7 @@ TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
 else:
-    columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp", "Completed"]
+    columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
     data = pd.DataFrame(columns=columns)
 
 if os.path.exists(TICKET_MISTAKES_FILE):
@@ -28,19 +28,12 @@ def submit_data(agent_name, type_, id_, comment):
         "TYPE": type_,
         "ID": id_,
         "COMMENT": comment,
-        "Timestamp": datetime.now().strftime("%H:%M:%S"),
-        "Completed": "Not Completed"  # Default to "Not Completed"
+        "Timestamp": datetime.now().strftime("%H:%M:%S")
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
     return data
-
-# Function to update the completed status
-def update_completion(index, completed_status):
-    global data
-    data.at[index, "Completed"] = completed_status
-    data.to_csv(DATA_FILE, index=False)
 
 # Function to refresh data
 def refresh_data():
@@ -68,26 +61,7 @@ if tab == "Request":
     
     if st.button("Refresh Data"):
         st.write("Data Table:")
-        for index, row in data.iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
-            col1.write(row["Agent Name"])
-            col2.write(row["TYPE"])
-            col3.write(row["ID"])
-            col4.write(row["COMMENT"])
-            col5.write(row["Timestamp"])
-            
-            # Using a toggle button for "Completed" status
-            completed_status = st.session_state.get(f"status_{index}", row["Completed"])  # Retrieve current status from session_state
-            
-            # Toggle button for the status change
-            if st.button(f"Toggle {row['ID']}", key=f"toggle_{index}"):
-                # Toggle between "Not Completed" and "Completed"
-                new_status = "Completed" if completed_status == "Not Completed" else "Not Completed"
-                update_completion(index, new_status)
-                st.session_state[f"status_{index}"] = new_status  # Save the new status in session_state
-                st.experimental_rerun()  # Trigger a rerun to update the display
-
-            col6.write(completed_status)  # Display the current status
+        st.write(data)  # Display the data as it is
 
 # Ticket Mistakes Tab
 if tab == "Ticket Mistakes":
