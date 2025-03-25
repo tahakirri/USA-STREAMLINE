@@ -14,7 +14,7 @@ if os.path.exists(REQUEST_FILE):
     if "Completed" not in request_data.columns:
         request_data["Completed"] = False
 else:
-    request_data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp", "Completed"])
+    request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
 
 # Load mistake data
 if os.path.exists(MISTAKE_FILE):
@@ -54,12 +54,12 @@ if section == "Request":
             st.error("Please fill out all fields.")
         else:
             new_data = {
+                "Completed": False,
                 "Agent Name": agent_name_input,
                 "TYPE": type_input,
                 "ID": id_input,
                 "COMMENT": comment_input,
-                "Timestamp": datetime.now().strftime("%H:%M:%S"),
-                "Completed": False
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
             }
             new_row = pd.DataFrame([new_data])
             request_data = pd.concat([request_data, new_row], ignore_index=True)
@@ -69,50 +69,33 @@ if section == "Request":
     if not request_data.empty:
         st.write("### Submitted Requests:")
         
-        # Create a copy of the dataframe to modify for display
-        display_data = request_data.copy()
+        # Reorder columns to have Completed first
+        columns_order = ["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
         
-        # Create a list to store updated completed status
-        updated_completed = []
+        # Create a copy of the dataframe
+        display_data = request_data[columns_order].copy()
         
-        # Create a list to hold display rows
-        display_rows = []
+        # Modify dataframe to use custom checkbox rendering
+        edited_df = st.data_editor(
+            display_data, 
+            column_config={
+                "Completed": st.column_config.CheckboxColumn(
+                    "Completed",
+                    help="Mark request as completed",
+                    default=False
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
         
-        for index, row in display_data.iterrows():
-            # Create checkbox
-            completed = st.checkbox(
-                "✔", 
-                value=row["Completed"], 
-                key=f"completed_{index}"
-            )
-            updated_completed.append(completed)
-            display_rows.append({
-                "Completed": completed,
-                "Agent Name": row["Agent Name"],
-                "Type": row["TYPE"],
-                "ID": row["ID"],
-                "Comment": row["COMMENT"],
-                "Timestamp": row["Timestamp"]
-            })
-        
-        # Create display DataFrame
-        display_df = pd.DataFrame(display_rows)
-        
-        # Reorder columns
-        display_df = display_df[["Completed", "Agent Name", "Type", "ID", "Comment", "Timestamp"]]
-        
-        # Display as dataframe
-        st.dataframe(display_df, use_container_width=True)
-        
-        # Update the Completed column in the original dataframe
-        request_data.loc[:, "Completed"] = updated_completed
-        
-        # Save updated data
+        # Save changes back to the original dataframe and CSV
+        request_data.loc[:, columns_order] = edited_df
         request_data.to_csv(REQUEST_FILE, index=False)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-# HOLD Tab
+# HOLD Tab (unchanged from previous version)
 if section == "HOLD":
     st.header("HOLD Section")
     uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
@@ -128,7 +111,7 @@ if section == "HOLD":
             st.write("No image uploaded.")
     st.markdown("<hr>", unsafe_allow_html=True)
 
-# Ticket Mistakes Tab
+# Ticket Mistakes Tab (unchanged from previous version)
 if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
 
