@@ -80,7 +80,7 @@ if not st.session_state.authenticated:
             st.session_state.authenticated = True
             st.session_state.role = role
             st.session_state.username = username
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Invalid credentials")
 else:
