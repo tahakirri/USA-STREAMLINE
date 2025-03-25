@@ -88,20 +88,20 @@ tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"], label
 if tab == "Request":
     st.header("Request Section")
     
-    # Layout with horizontal columns
-    col1, col2, col3 = st.columns([2, 3, 2])  # Use 3 columns for better spacing
+    # Layout with columns for better alignment
+    col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
         agent_name_input = st.text_input("Agent Name", key="agent_name")
         type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
+        id_input = st.text_input("ID", key="id")
     
     with col2:
-        id_input = st.text_input("ID", key="id")
         comment_input = st.text_area("Comment", height=150, key="comment")
     
-    with col3:
-        submit_button = st.button("Submit Data")
-        refresh_button = st.button("Refresh Data")
+    # Buttons for submission and refresh with improved styling
+    submit_button = st.button("Submit Data")
+    refresh_button = st.button("Refresh Data")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -129,18 +129,12 @@ if tab == "Request":
 # HOLD Tab
 if tab == "HOLD":
     st.header("HOLD Section")
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
     
-    # Layout with horizontal columns
-    col1, col2 = st.columns([3, 2])  # Use 2 columns for image upload and display
-    
-    with col1:
-        uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-    
-    with col2:
-        if uploaded_image:
-            image = Image.open(uploaded_image)
-            st.image(image, caption="Uploaded Image", use_column_width=True)
-    
+    if uploaded_image:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
     if st.button("CHECK HOLD"):
         if uploaded_image:
             st.image(image, caption="Latest Uploaded Image", use_column_width=True)
@@ -152,20 +146,20 @@ if tab == "HOLD":
 if tab == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
     
-    # Layout with horizontal columns
-    col1, col2, col3 = st.columns([2, 3, 2])  # Use 3 columns for better spacing
+    # Layout with columns for better alignment
+    col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
         team_leader_input = st.text_input("Team Leader Name", key="team_leader")
         agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
+        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
     
     with col2:
-        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
         error_input = st.text_area("Error", height=150, key="error")
     
-    with col3:
-        submit_mistake_button = st.button("Submit Mistake")
-        refresh_mistake_button = st.button("Refresh Mistakes")
+    # Buttons for submission and refresh with improved styling
+    submit_mistake_button = st.button("Submit Mistake")
+    refresh_mistake_button = st.button("Refresh Mistakes")
     
     if submit_mistake_button:
         # Ensure fields are filled out before submission
