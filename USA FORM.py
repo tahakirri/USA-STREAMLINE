@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import hashlib
 from datetime import datetime
+import pandas as pd
 
 # Initialize database
 def init_db():
@@ -13,7 +14,6 @@ def init_db():
             username TEXT UNIQUE,
             password TEXT,
             role TEXT CHECK(role IN ('agent', 'admin'))
-        )
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS requests (
@@ -23,8 +23,7 @@ def init_db():
             identifier TEXT,
             comment TEXT,
             timestamp TEXT,
-            completed INTEGER DEFAULT 0
-        )
+            completed INTEGER DEFAULT 0)
     """)
     cursor.execute("""
         INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)
@@ -49,8 +48,10 @@ def authenticate(username, password):
 def add_request(agent_name, request_type, identifier, comment):
     conn = sqlite3.connect("requests.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) VALUES (?, ?, ?, ?, ?)" ,
-                   (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    cursor.execute("""
+        INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
+        VALUES (?, ?, ?, ?, ?)
+    """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
     conn.close()
 
@@ -58,10 +59,18 @@ def add_request(agent_name, request_type, identifier, comment):
 def get_requests():
     conn = sqlite3.connect("requests.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM requests")
+    cursor.execute("SELECT * FROM requests ORDER BY completed, timestamp DESC")
     requests = cursor.fetchall()
     conn.close()
     return requests
+
+# Update request completion status
+def update_request_status(request_id, completed):
+    conn = sqlite3.connect("requests.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE requests SET completed=? WHERE id=?", (completed, request_id))
+    conn.commit()
+    conn.close()
 
 # Streamlit UI
 st.set_page_config(page_title="Request Management System", layout="wide", initial_sidebar_state="expanded")
@@ -86,7 +95,7 @@ if not st.session_state.authenticated:
             st.error("Invalid credentials")
 else:
     with st.sidebar:
-        st.markdown(f"### Logged in as: {st.session_state.username}")
+        st.markdown(f"### Welcome, {st.session_state.username}")
         section = st.radio("Navigation", ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes", "⚙ Admin Panel" if st.session_state.role == "admin" else ""])
     
     if section == "📋 Request":
@@ -101,8 +110,27 @@ else:
         st.subheader("Requests")
         requests = get_requests()
         if requests:
-            for req in requests:
-                st.write(req)
+            # Create a DataFrame for better display
+            df = pd.DataFrame(requests, columns=["ID", "Agent", "Type", "Identifier", "Comment", "Timestamp", "Completed"])
+            
+            # Display each request with a checkbox
+            for index, row in df.iterrows():
+                col1, col2 = st.columns([0.9, 0.1])
+                with col1:
+                    st.markdown(f"""
+                    **Request ID:** {row['ID']}  
+                    **Agent:** {row['Agent']}  
+                    **Type:** {row['Type']}  
+                    **Identifier:** {row['Identifier']}  
+                    **Comment:** {row['Comment']}  
+                    **Timestamp:** {row['Timestamp']}  
+                    """)
+                with col2:
+                    completed = st.checkbox("Done", value=bool(row['Completed']), key=f"check_{row['ID']}")
+                    if completed != bool(row['Completed']):
+                        update_request_status(row['ID'], int(completed))
+                        st.rerun()
+                st.divider()
         else:
             st.write("No requests found.")
 
