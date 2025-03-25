@@ -86,6 +86,10 @@ st.markdown("""
             padding: 20px;
         }
 
+        /* Ensure comment section height matches the input fields */
+        .stTextArea {
+            height: 150px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -107,7 +111,7 @@ if section == "Request":
         id_input = st.text_input("ID", key="id")
     
     with col2:
-        comment_input = st.text_area("Comment", height=150, key="comment")
+        comment_input = st.text_area("Comment", height=150, key="comment")  # Adjusted height for comment
     
     # Buttons for submission and refresh with improved styling
     submit_button = st.button("Submit Data")
