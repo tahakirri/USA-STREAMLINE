@@ -100,8 +100,14 @@ if section == "📋 Request":
     with col2:
         comment_input = st.text_area("💬 Comment", height=150, key="comment")  
     
-    submit_button = st.button("✅ Submit Data")
-    refresh_button = st.button("🔄 Refresh Data")
+    # Side-by-side buttons
+    btn_col1, btn_col2 = st.columns(2)
+    
+    with btn_col1:
+        submit_button = st.button("✅ Submit Data")
+    
+    with btn_col2:
+        refresh_button = st.button("🔄 Refresh Data")
     
     if submit_button:
         if not agent_name_input or not id_input or not comment_input:
@@ -172,8 +178,14 @@ if section == "❌ Ticket Mistakes":
     with col2:
         error_input = st.text_area("⚠️ Error", height=150, key="error")
     
-    submit_mistake_button = st.button("✅ Submit Mistake")
-    refresh_mistake_button = st.button("🔄 Refresh Mistakes")
+    # Side-by-side buttons for Ticket Mistakes
+    btn_col1, btn_col2 = st.columns(2)
+    
+    with btn_col1:
+        submit_mistake_button = st.button("✅ Submit Mistake")
+    
+    with btn_col2:
+        refresh_mistake_button = st.button("🔄 Refresh Mistakes")
     
     if submit_mistake_button:
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
