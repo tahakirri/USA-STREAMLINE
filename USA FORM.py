@@ -51,52 +51,27 @@ with st.sidebar:
     ])
     
     # Add theme toggle in the sidebar
-    dark_mode = st.toggle("🌙 Dark Mode", value=True)
+    dark_mode = st.toggle("🌙 Dark Mode / ☀️ Light Mode", value=True)
 
 # Define CSS based on theme selection
 if dark_mode:
     custom_css = """
     <style>
         /* Dark Mode Theme */
-        .stApp {
-            background-color: #0e1117;
-            color: #ffffff;
-        }
-        
-        /* Custom Sidebar Styling */
-        [data-testid="stSidebar"] {
-            background-color: #1e2129;
-        }
-        
-        /* Header Styling */
-        h1, h2, h3, h4 {
-            color: #4db8ff;
-        }
-        
-        /* Input and Select Box Styling */
-        .stTextInput > div > div > input, 
-        .stSelectbox > div > div > div > select {
-            background-color: #2c2f36;
-            color: #ffffff;
-            border: 1px solid #4a4e57;
-        }
-        
-        /* Data Editor Styling */
-        .dataframe {
-            background-color: #1e2129;
-            color: #ffffff;
-        }
-        
-        /* Button Styling */
-        .stButton > button {
-            background-color: #4db8ff;
-            color: #ffffff;
-            border: none;
-            transition: background-color 0.3s ease;
-        }
-        
-        .stButton > button:hover {
-            background-color: #3aa0ff;
+        :root {
+            --primary-text: #ffffff;
+            --secondary-text: #f0f0f0;
+            --background: #0e1117;
+            --sidebar: #1e2129;
+            --header: #4db8ff;
+            --input-bg: #2c2f36;
+            --input-border: #4a4e57;
+            --input-text: #ffffff;
+            --button-bg: #4db8ff;
+            --button-hover: #3aa0ff;
+            --button-text: #ffffff;
+            --table-bg: #1e2129;
+            --table-text: #ffffff;
         }
     </style>
     """
@@ -104,50 +79,105 @@ else:
     custom_css = """
     <style>
         /* Light Mode Theme */
-        .stApp {
-            background-color: #ffffff;
-            color: #000000;
+        :root {
+            --primary-text: #000000;
+            --secondary-text: #333333;
+            --background: #ffffff;
+            --sidebar: #f0f2f6;
+            --header: #0068c9;
+            --input-bg: #ffffff;
+            --input-border: #d1d5db;
+            --input-text: #000000;
+            --button-bg: #0068c9;
+            --button-hover: #0055a5;
+            --button-text: #ffffff;
+            --table-bg: #ffffff;
+            --table-text: #000000;
         }
         
-        /* Custom Sidebar Styling */
-        [data-testid="stSidebar"] {
-            background-color: #f0f2f6;
+        /* Fix for text color in light mode */
+        p, div, span, label {
+            color: var(--primary-text) !important;
         }
         
-        /* Header Styling */
-        h1, h2, h3, h4 {
-            color: #0068c9;
-        }
-        
-        /* Input and Select Box Styling */
-        .stTextInput > div > div > input, 
-        .stSelectbox > div > div > div > select {
-            background-color: #ffffff;
-            color: #000000;
-            border: 1px solid #d1d5db;
-        }
-        
-        /* Data Editor Styling */
-        .dataframe {
-            background-color: #ffffff;
-            color: #000000;
-        }
-        
-        /* Button Styling */
-        .stButton > button {
-            background-color: #0068c9;
-            color: #ffffff;
-            border: none;
-            transition: background-color 0.3s ease;
-        }
-        
-        .stButton > button:hover {
-            background-color: #0055a5;
+        /* Fix for selectbox text color */
+        .stSelectbox label {
+            color: var(--primary-text) !important;
         }
     </style>
     """
 
-st.markdown(custom_css, unsafe_allow_html=True)
+# Common CSS styles
+common_css = """
+<style>
+    /* Common Styles */
+    .stApp {
+        background-color: var(--background);
+        color: var(--primary-text);
+    }
+    
+    /* Custom Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: var(--sidebar);
+    }
+    
+    /* Header Styling */
+    h1, h2, h3, h4 {
+        color: var(--header);
+    }
+    
+    /* Input and Select Box Styling */
+    .stTextInput > div > div > input, 
+    .stSelectbox > div > div > div > select,
+    .stTextArea > div > div > textarea {
+        background-color: var(--input-bg);
+        color: var(--input-text);
+        border: 1px solid var(--input-border);
+    }
+    
+    /* Fix for selectbox options */
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: var(--input-bg);
+        color: var(--input-text);
+    }
+    
+    /* Data Editor Styling */
+    .dataframe {
+        background-color: var(--table-bg);
+        color: var(--table-text);
+    }
+    
+    /* Button Styling */
+    .stButton > button {
+        background-color: var(--button-bg);
+        color: var(--button-text);
+        border: none;
+        transition: background-color 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background-color: var(--button-hover);
+    }
+    
+    /* Fix for checkbox labels */
+    .stCheckbox label {
+        color: var(--primary-text) !important;
+    }
+    
+    /* Fix for radio button labels */
+    .stRadio label {
+        color: var(--primary-text) !important;
+    }
+    
+    /* Fix for text input labels */
+    .stTextInput label, .stTextArea label {
+        color: var(--primary-text) !important;
+    }
+</style>
+"""
+
+# Combine the custom CSS with common styles
+st.markdown(custom_css + common_css, unsafe_allow_html=True)
 
 # Request Tab
 if section == "📋 Request":
