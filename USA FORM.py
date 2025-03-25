@@ -3,17 +3,11 @@ import pandas as pd
 from datetime import datetime
 from PIL import Image
 import os
+import time
 
 # Define the path to the CSV file where the data will be stored
 DATA_FILE = 'shared_data.csv'
 TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
-
-# Path where images will be saved
-IMAGE_SAVE_PATH = 'uploaded_images/'
-
-# Create the directory if it doesn't exist
-if not os.path.exists(IMAGE_SAVE_PATH):
-    os.makedirs(IMAGE_SAVE_PATH)
 
 # Load the data from the CSV file if it exists
 if os.path.exists(DATA_FILE):
@@ -59,13 +53,6 @@ def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
     return ticket_mistakes
 
-# Function to save and return the file path for uploaded images
-def save_uploaded_image(uploaded_image):
-    image_path = os.path.join(IMAGE_SAVE_PATH, uploaded_image.name)
-    with open(image_path, "wb") as f:
-        f.write(uploaded_image.getbuffer())
-    return image_path
-
 # Function to refresh data
 def refresh_data():
     return data
@@ -75,6 +62,32 @@ def refresh_ticket_mistakes():
 
 # Streamlit interface
 st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and layout
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .stButton>button {
+        background-color: #4CAF50; 
+        color: white; 
+        padding: 10px 24px; 
+        border: none; 
+        cursor: pointer;
+        border-radius: 12px;
+        font-size: 16px;
+    }
+    .stButton>button:hover {
+        background-color: #45a049;
+    }
+    .stTextInput input, .stTextArea textarea {
+        font-size: 16px;
+        padding: 10px;
+    }
+    .stSelectbox select {
+        font-size: 16px;
+        padding: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("USA Collab")
 
@@ -101,18 +114,17 @@ if tab == "Request":
     refresh_button = st.button("Refresh Data")
     
     if submit_button:
-        # Ensure fields are filled out before submission
-        if not agent_name_input or not id_input or not comment_input:
-            st.error("Please fill out all fields.")
-        else:
-            data = submit_data(agent_name_input, type_input, id_input, comment_input)
-            st.success("Data Submitted!")
-            st.write("Latest Submitted Data:")
-            st.write(data)  # Automatically display the refreshed data
+        with st.spinner("Submitting data..."):
+            # Ensure fields are filled out before submission
+            if not agent_name_input or not id_input or not comment_input:
+                st.error("Please fill out all fields.")
+            else:
+                data = submit_data(agent_name_input, type_input, id_input, comment_input)
+                st.success("Data Submitted!")
     
     if refresh_button:
         st.write("Latest Submitted Data:")
-        st.write(data)  # Show the data when refresh is clicked
+        st.write(data)  # Show the data table
     
     # Additional space for better layout
     st.markdown("---")
@@ -121,25 +133,18 @@ if tab == "Request":
 if tab == "HOLD":
     st.header("HOLD Section")
     uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
-
-    if uploaded_image:
-        # Save the uploaded image
-        image_path = save_uploaded_image(uploaded_image)
-        st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
     
-    # Check if the uploaded image exists and show it
-    if st.button("CHECK HOLD"):
-        # List all uploaded images in the folder
-        uploaded_images = os.listdir(IMAGE_SAVE_PATH)
-        
-        if uploaded_images:
-            # Display the images
-            for img_file in uploaded_images:
-                img_path = os.path.join(IMAGE_SAVE_PATH, img_file)
-                img = Image.open(img_path)
-                st.image(img, caption=f"Uploaded Image: {img_file}", use_column_width=True)
-        else:
-            st.write("No image uploaded.")
+    if uploaded_image:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+    
+    check_button = st.button("CHECK HOLD")
+    if check_button:
+        with st.spinner("Checking the image..."):
+            if uploaded_image:
+                st.image(image, caption="Latest Uploaded Image", use_column_width=True)
+            else:
+                st.write("No image uploaded.")
     
     # Additional space for better layout
     st.markdown("---")
@@ -160,22 +165,21 @@ if tab == "Ticket Mistakes":
         error_input = st.text_area("Error", height=150)
     
     # Buttons for submission and refresh
-    submit_button = st.button("Submit Mistake")
-    refresh_button = st.button("Refresh Mistakes")
+    submit_button_mistake = st.button("Submit Mistake")
+    refresh_button_mistake = st.button("Refresh Mistakes")
     
-    if submit_button:
-        # Ensure fields are filled out before submission
-        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
-            st.error("Please fill out all fields.")
-        else:
-            ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
-            st.success("Mistake Submitted!")
-            st.write("Mistakes Table:")
-            st.write(ticket_mistakes)  # Automatically display the refreshed data
+    if submit_button_mistake:
+        with st.spinner("Submitting mistake..."):
+            # Ensure fields are filled out before submission
+            if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
+                st.error("Please fill out all fields.")
+            else:
+                ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
+                st.success("Mistake Submitted!")
     
-    if refresh_button:
+    if refresh_button_mistake:
         st.write("Mistakes Table:")
-        st.write(ticket_mistakes)  # Show the ticket mistakes data when refresh is clicked
+        st.write(ticket_mistakes)  # Show the ticket mistakes table
     
     # Additional space for better layout
     st.markdown("---")
