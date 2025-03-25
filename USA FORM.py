@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime
 import pandas as pd
 import os
+import re
 
 # --------------------------
 # Database Functions
@@ -51,6 +52,29 @@ def init_db():
                 ticket_id TEXT,
                 error_description TEXT,
                 timestamp TEXT
+            )
+        """)
+        
+        # Group messages table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS group_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )
+        """)
+        
+        # Private messages table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS private_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                receiver TEXT,
+                message TEXT,
+                timestamp TEXT,
+                is_read INTEGER DEFAULT 0
             )
         """)
         
@@ -182,6 +206,24 @@ def get_all_users():
         if conn:
             conn.close()
 
+def get_all_users_except(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username FROM users 
+            WHERE username != ?
+            ORDER BY username
+        """, (username,))
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
 def create_user(username, password, role):
     conn = None
     try:
@@ -253,6 +295,112 @@ def delete_user(user_id):
         if conn:
             conn.close()
 
+def add_group_message(sender, message, mentions=None):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO group_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ",".join(mentions) if mentions else ""))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add group message: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def add_private_message(sender, receiver, message):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO private_messages (sender, receiver, message, timestamp) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, receiver, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add private message: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch group messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_private_messages(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM private_messages 
+            WHERE receiver=? OR sender=?
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """, (username, username))
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch private messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def mark_as_read(message_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE private_messages 
+            SET is_read=1 
+            WHERE id=?
+        """, (message_id,))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to mark message as read: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_unread_count(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) FROM private_messages 
+            WHERE receiver=? AND is_read=0
+        """, (username,))
+        return cursor.fetchone()[0]
+    except sqlite3.Error as e:
+        st.error(f"Failed to get unread count: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+def extract_mentions(text):
+    return set(re.findall(r'@(\w+)', text))
+
 # --------------------------
 # Streamlit UI
 # --------------------------
@@ -293,13 +441,19 @@ if not st.session_state.authenticated:
 else:
     with st.sidebar:
         st.markdown(f"### Welcome, {st.session_state.username}")
-        nav_options = ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes"]
+        
+        # Show unread message count
+        unread_count = get_unread_count(st.session_state.username)
+        badge = f" ({unread_count})" if unread_count > 0 else ""
+        
+        nav_options = ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes", f"💬 Conversation Room{badge}"]
         if st.session_state.role == "admin":
             nav_options.append("⚙ Admin Panel")
+        
         section = st.radio("Navigation", nav_options)
     
     # Request Section
-    if section == "📋 Request":
+    if section.startswith("📋 Request"):
         st.subheader("Submit a Request")
         request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
         identifier = st.text_input("Identifier")
@@ -383,6 +537,109 @@ else:
                 **Timestamp:** {ts}  
                 """)
                 st.divider()
+
+    # Conversation Room Section
+    elif section.startswith("💬 Conversation Room"):
+        st.subheader("Conversation Room")
+        
+        tab1, tab2 = st.tabs(["Group Chat", "Private Messages"])
+        
+        with tab1:
+            st.markdown("### Group Chat (All users can see these messages)")
+            
+            # Display group messages
+            messages = get_group_messages()
+            for msg in reversed(messages):  # Show newest at bottom
+                msg_id, sender, message, timestamp, mentions = msg
+                
+                # Check if current user was mentioned
+                mentioned = mentions and st.session_state.username in mentions.split(",")
+                
+                # Display message with appropriate styling
+                if mentioned:
+                    st.markdown(f"""
+                    <div style='background-color: #fff8e1; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                        <strong>{sender}</strong> <span style='color: #ff6d00;'>(mentioned you)</span> - {timestamp}<br>
+                        {message}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                        <strong>{sender}</strong> - {timestamp}<br>
+                        {message}
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.divider()
+            
+            # Send new message to group
+            with st.form("group_message_form"):
+                new_message = st.text_area("Message", help="Use @username to mention someone")
+                if st.form_submit_button("Send to Group"):
+                    if new_message:
+                        mentions = extract_mentions(new_message)
+                        valid_mentions = []
+                        
+                        # Validate mentioned users exist
+                        all_users = [user[1] for user in get_all_users()]
+                        for mention in mentions:
+                            if mention in all_users:
+                                valid_mentions.append(mention)
+                            else:
+                                st.warning(f"User @{mention} not found")
+                        
+                        add_group_message(st.session_state.username, new_message, valid_mentions)
+                        st.rerun()
+        
+        with tab2:
+            st.markdown("### Private Messages")
+            
+            if st.session_state.role == "admin":
+                # Admin can select who to message
+                recipients = get_all_users_except(st.session_state.username)
+                selected_recipient = st.selectbox("Message to:", recipients)
+            else:
+                # Agents can only message admin
+                selected_recipient = "admin"
+                st.markdown("You can privately message the admin team")
+            
+            # Display private messages
+            private_msgs = get_private_messages(st.session_state.username)
+            filtered_msgs = [msg for msg in private_msgs 
+                            if (msg[1] == selected_recipient and msg[2] == st.session_state.username) or
+                               (msg[1] == st.session_state.username and msg[2] == selected_recipient)]
+            
+            for msg in reversed(filtered_msgs):  # Show newest at bottom
+                msg_id, sender, receiver, message, timestamp, is_read = msg
+                
+                # Mark as read when viewed
+                if receiver == st.session_state.username and not is_read:
+                    mark_as_read(msg_id)
+                
+                # Display message
+                if sender == st.session_state.username:
+                    st.markdown(f"""
+                    <div style='background-color: #e3f2fd; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                        <strong>You</strong> - {timestamp}<br>
+                        {message}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                        <strong>{sender}</strong> - {timestamp}<br>
+                        {message}
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.divider()
+            
+            # Send private message
+            with st.form("private_message_form"):
+                private_message = st.text_area("Private Message")
+                if st.form_submit_button(f"Send to {selected_recipient}"):
+                    if private_message:
+                        add_private_message(st.session_state.username, selected_recipient, private_message)
+                        st.rerun()
 
     # Admin Panel Section
     elif section == "⚙ Admin Panel" and st.session_state.role == "admin":
