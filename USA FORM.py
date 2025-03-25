@@ -38,6 +38,18 @@ def init_db():
             )
         """)
         
+        # Create mistakes table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mistakes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_leader TEXT,
+                agent_name TEXT,
+                ticket_id TEXT,
+                error_description TEXT,
+                timestamp TEXT
+            )
+        """)
+        
         # Insert admin user if not exists
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
@@ -91,6 +103,23 @@ def add_request(agent_name, request_type, identifier, comment):
         if conn:
             conn.close()
 
+# Insert new mistake with error handling
+def add_mistake(team_leader, agent_name, ticket_id, error_description):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add mistake: {e}")
+    finally:
+        if conn:
+            conn.close()
+
 # Fetch requests with error handling
 def get_requests():
     conn = None
@@ -104,6 +133,24 @@ def get_requests():
         return cursor.fetchall()
     except sqlite3.Error as e:
         st.error(f"Failed to fetch requests: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+# Fetch mistakes with error handling
+def get_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch mistakes: {e}")
         return []
     finally:
         if conn:
@@ -169,7 +216,13 @@ else:
         section = st.radio("Navigation", nav_options)
     
     if section == "📋 Request":
-        st.subheader("Submit a Request")
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.subheader("Submit a Request")
+        with col2:
+            if st.button("🔄 Refresh Requests"):
+                st.rerun()
+        
         request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
         identifier = st.text_input("Identifier")
         comment = st.text_area("Comment")
@@ -215,7 +268,13 @@ else:
             st.success("Image uploaded successfully!")
 
     elif section == "❌ Ticket Mistakes":
-        st.subheader("Ticket Mistakes Section")
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.subheader("Ticket Mistakes Section")
+        with col2:
+            if st.button("🔄 Refresh Mistakes"):
+                st.rerun()
+        
         team_leader = st.text_input("Team Leader Name")
         agent_name = st.text_input("Agent Name")
         ticket_id = st.text_input("Ticket ID")
@@ -223,9 +282,24 @@ else:
         
         if st.button("Submit Mistake"):
             if team_leader and agent_name and ticket_id and error_description:
+                add_mistake(team_leader, agent_name, ticket_id, error_description)
                 st.success("Mistake submitted!")
             else:
                 st.warning("Please fill all fields")
+        
+        # Display submitted mistakes
+        mistakes = get_mistakes()
+        if mistakes:
+            st.subheader("Submitted Mistakes")
+            for mistake in mistakes:
+                m_id, tl, agent, t_id, desc, ts = mistake
+                st.markdown(f"""
+                **ID:** {m_id} | **Team Leader:** {tl} | **Agent:** {agent}  
+                **Ticket ID:** {t_id}  
+                **Description:** {desc}  
+                **Timestamp:** {ts}  
+                """)
+                st.divider()
 
     elif section == "⚙ Admin Panel" and st.session_state.role == "admin":
         st.subheader("Admin Panel")
@@ -240,6 +314,20 @@ else:
                 st.success("All requests cleared!")
             except sqlite3.Error as e:
                 st.error(f"Failed to clear requests: {e}")
+            finally:
+                if conn:
+                    conn.close()
+        
+        if st.button("Clear All Mistakes"):
+            conn = None
+            try:
+                conn = sqlite3.connect("data/requests.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM mistakes")
+                conn.commit()
+                st.success("All mistakes cleared!")
+            except sqlite3.Error as e:
+                st.error(f"Failed to clear mistakes: {e}")
             finally:
                 if conn:
                     conn.close()
