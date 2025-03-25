@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from PIL import Image
 import os
 
 # Define the path to the CSV file where the data will be stored
@@ -30,90 +29,46 @@ def submit_data(agent_name, type_, id_, comment):
         "ID": id_,
         "COMMENT": comment,
         "Timestamp": datetime.now().strftime("%H:%M:%S"),
-        "Completed": False
+        "Completed": "Not Completed"  # Default to "Not Completed"
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
+    return data
 
-# Function to submit ticket mistakes data
-def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
-    global ticket_mistakes
-    new_mistake = {
-        "Team Leader Name": team_leader,
-        "Agent Name": agent_name,
-        "Ticket ID": ticket_id,
-        "Error": error,
-        "Timestamp": datetime.now().strftime("%H:%M:%S")
-    }
-    new_row = pd.DataFrame([new_mistake])
-    ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
-    ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
+# Function to update the completed status
+def update_completion(index, completed_status):
+    global data
+    data.at[index, "Completed"] = completed_status
+    data.to_csv(DATA_FILE, index=False)
 
 # Function to refresh data
 def refresh_data():
     return data
 
-def refresh_ticket_mistakes():
-    return ticket_mistakes
-
-# Initialize image storage
-image_storage = {"image": None}
-
-def check_hold():
-    return image_storage["image"]
-
-# Enable Dark Mode
-st.markdown("""
-    <style>
-        body {
-            background-color: #2e2e2e;
-            color: white;
-        }
-        .stTextInput>label, .stTextArea>label, .stSelectbox>label, .stRadio>label, .stButton>label {
-            color: white;
-        }
-        .stButton>button {
-            background-color: #333;
-            color: white;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # Streamlit interface
 st.title("USA Collab")
 
 # Tabs
-tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"])
+tab = st.radio("Choose a Section", ["Request", "Ticket Mistakes"])
 
 # Request Tab
 if tab == "Request":
     st.header("Request Section")
-    
     agent_name_input = st.text_input("Agent Name")
     type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
     id_input = st.text_input("ID")
     comment_input = st.text_area("Comment")
     
-    # Data Validation: Ensure fields are not empty
     if st.button("Submit Data"):
-        if not agent_name_input or not id_input or not comment_input:
-            st.error("Please fill in all fields.")
-        else:
-            submit_data(agent_name_input, type_input, id_input, comment_input)
-            st.write("Data Submitted!")
-            st.write("Latest Submitted Data:")
-            st.write(data.tail(1))  # Show the latest row
+        data = submit_data(agent_name_input, type_input, id_input, comment_input)
+        st.write("Data Submitted!")
+        st.write("Latest Submitted Data:")
+        st.write(data.tail(1))
     
-    # Refresh Button
     if st.button("Refresh Data"):
         st.write("Data Table:")
-        
-        # Show data as a table and include checkboxes for the "Completed" status
-        data_copy = data.copy()
-        
-        # Use a checkbox in each row to toggle "Completed" status
-        for index, row in data_copy.iterrows():
+        for index, row in data.iterrows():
             col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
             col1.write(row["Agent Name"])
             col2.write(row["TYPE"])
@@ -121,29 +76,17 @@ if tab == "Request":
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
             
-            # Display checkbox to mark completion status
-            completed = col6.checkbox("Completed", value=row["Completed"], key=f"status_{index}")
-            if completed != row["Completed"]:
-                data.at[index, "Completed"] = completed
-                data.to_csv(DATA_FILE, index=False)  # Save the updated status to the CSV file
-                st.write("Status updated!")
-        
-        st.write(data_copy)  # Display the updated data with checked/unchecked boxes
-
-# HOLD Tab
-if tab == "HOLD":
-    st.header("HOLD Section")
-    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_image:
-        image_storage["image"] = Image.open(uploaded_image)
-        st.image(image_storage["image"], caption="Uploaded Image", use_column_width=True)
-    
-    if st.button("CHECK HOLD"):
-        if image_storage["image"] is not None:
-            st.image(image_storage["image"], caption="Latest Uploaded Image", use_column_width=True)
-        else:
-            st.write("No image uploaded.")
+            # Using radio buttons to set "Completed" status
+            completed_status = col6.radio(
+                "Status",
+                ["Not Completed", "Completed"],
+                index=0 if row["Completed"] == "Not Completed" else 1,
+                key=f"status_{index}"
+            )
+            
+            # Update the completion status if changed
+            if completed_status != row["Completed"]:
+                update_completion(index, completed_status)
 
 # Ticket Mistakes Tab
 if tab == "Ticket Mistakes":
@@ -154,14 +97,12 @@ if tab == "Ticket Mistakes":
     error_input = st.text_area("Error")
     
     if st.button("Submit Mistake"):
-        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
-            st.error("Please fill in all fields.")
-        else:
-            submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
-            st.write("Mistake Submitted!")
-            st.write("Latest Submitted Mistake:")
-            st.write(ticket_mistakes.tail(1))  # Show the latest row
+        ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
+        st.write("Mistake Submitted!")
+        st.write("Latest Submitted Mistake:")
+        st.write(ticket_mistakes.tail(1))
     
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
         st.write(refresh_ticket_mistakes())
+
