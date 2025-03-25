@@ -207,6 +207,20 @@ def get_all_users():
         if conn:
             conn.close()
 
+def get_all_users_except(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM users WHERE username != ? ORDER BY username", (username,))
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
 def get_admins():
     conn = None
     try:
@@ -217,6 +231,77 @@ def get_admins():
     except sqlite3.Error as e:
         st.error(f"Failed to fetch admins: {e}")
         return []
+    finally:
+        if conn:
+            conn.close()
+
+def create_user(username, password, role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, (username, hash_password(password), role))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to create user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def update_user_role(user_id, new_role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET role=? 
+            WHERE id=?
+        """, (new_role, user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to update user role: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def reset_user_password(user_id, new_password):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET password=? 
+            WHERE id=?
+        """, (hash_password(new_password), user_id)
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to reset password: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(user_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to delete user: {e}")
+        return False
     finally:
         if conn:
             conn.close()
@@ -506,6 +591,7 @@ if "authenticated" not in st.session_state:
     st.session_state.role = None
     st.session_state.username = None
     st.session_state.last_unread_count = 0
+    st.session_state.last_message_count = 0
 
 # Initialize database
 init_db()
@@ -644,10 +730,10 @@ else:
             st.markdown("### Group Chat")
             
             # Container for messages
-            st.markdown('<div class="message-container">', unsafe_allow_html=True)
+            messages_container = st.container()
             
             messages = get_group_messages()
-            for msg in messages:
+            for msg in reversed(messages):  # Show newest at bottom
                 msg_id, sender, message, timestamp, mentions = msg
                 
                 # Check if current user sent the message
@@ -667,15 +753,28 @@ else:
                 formatted_time = msg_time.strftime("%I:%M %p")
                 
                 # Message bubble
-                st.markdown(f"""
-                <div class="message {'sent' if is_sent else 'received'}">
-                    {'' if is_sent else f'<div class="sender-name">{sender}</div>'}
-                    {formatted_message}
-                    <div class="timestamp">{formatted_time}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+                with messages_container:
+                    cols = st.columns([1])
+                    with cols[0]:
+                        if is_sent:
+                            st.markdown(f"""
+                            <div style="text-align: right; margin-bottom: 10px;">
+                                <div style="display: inline-block; background-color: #0078FF; color: white; padding: 8px 12px; border-radius: 15px; max-width: 70%;">
+                                    {formatted_message}
+                                    <div style="font-size: 0.7em; color: #e0e0e0;">{formatted_time}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style="margin-bottom: 10px;">
+                                <div style="font-weight: 600; font-size: 0.85em; color: #555;">{sender}</div>
+                                <div style="display: inline-block; background-color: #f0f0f0; padding: 8px 12px; border-radius: 15px; max-width: 70%;">
+                                    {formatted_message}
+                                    <div style="font-size: 0.7em; color: #777;">{formatted_time}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
             
             # Message input area
             with st.form("group_message_form", clear_on_submit=True):
@@ -713,7 +812,7 @@ else:
                 selected_recipient = st.selectbox("Message to:", recipients)
             
             # Container for private messages
-            st.markdown('<div class="message-container">', unsafe_allow_html=True)
+            private_container = st.container()
             
             conversation = get_conversation_history(st.session_state.username, selected_recipient)
             for msg in conversation:
@@ -728,15 +827,28 @@ else:
                 formatted_time = msg_time.strftime("%I:%M %p")
                 
                 # Message bubble
-                st.markdown(f"""
-                <div class="message {'sent' if sender == st.session_state.username else 'received'}">
-                    {'' if sender == st.session_state.username else f'<div class="sender-name">{sender}</div>'}
-                    {message}
-                    <div class="timestamp">{formatted_time}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)
+                with private_container:
+                    cols = st.columns([1])
+                    with cols[0]:
+                        if sender == st.session_state.username:
+                            st.markdown(f"""
+                            <div style="text-align: right; margin-bottom: 10px;">
+                                <div style="display: inline-block; background-color: #0078FF; color: white; padding: 8px 12px; border-radius: 15px; max-width: 70%;">
+                                    {message}
+                                    <div style="font-size: 0.7em; color: #e0e0e0;">{formatted_time}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style="margin-bottom: 10px;">
+                                <div style="font-weight: 600; font-size: 0.85em; color: #555;">{sender}</div>
+                                <div style="display: inline-block; background-color: #f0f0f0; padding: 8px 12px; border-radius: 15px; max-width: 70%;">
+                                    {message}
+                                    <div style="font-size: 0.7em; color: #777;">{formatted_time}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
             
             # Message input area
             with st.form("private_message_form", clear_on_submit=True):
@@ -853,7 +965,14 @@ else:
 
 # Check for new messages and show notifications
 if st.session_state.get("authenticated", False):
+    current_message_count = len(get_group_messages())
+    if current_message_count > st.session_state.get("last_message_count", 0):
+        st.session_state.last_message_count = current_message_count
+        if section != "💬 Conversation Room":
+            show_notification("New message in group chat")
+    
     unread_count = get_unread_count(st.session_state.username)
     if unread_count > st.session_state.get("last_unread_count", 0):
         st.session_state.last_unread_count = unread_count
-        st.rerun()
+        if not section.startswith("💬 Conversation Room"):
+            show_notification(f"You have {unread_count} new messages")
