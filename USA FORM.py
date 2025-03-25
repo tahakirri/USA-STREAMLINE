@@ -108,8 +108,27 @@ if tab == "Request":
     # Refresh Button
     if st.button("Refresh Data"):
         st.write("Data Table:")
-        # Show data as a table
-        st.dataframe(data)  # Display the entire data in a table format
+        
+        # Show data as a table and include checkboxes for the "Completed" status
+        data_copy = data.copy()
+        
+        # Use a checkbox in each row to toggle "Completed" status
+        for index, row in data_copy.iterrows():
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
+            col1.write(row["Agent Name"])
+            col2.write(row["TYPE"])
+            col3.write(row["ID"])
+            col4.write(row["COMMENT"])
+            col5.write(row["Timestamp"])
+            
+            # Display checkbox to mark completion status
+            completed = col6.checkbox("Completed", value=row["Completed"], key=f"status_{index}")
+            if completed != row["Completed"]:
+                data.at[index, "Completed"] = completed
+                data.to_csv(DATA_FILE, index=False)  # Save the updated status to the CSV file
+                st.write("Status updated!")
+        
+        st.write(data_copy)  # Display the updated data with checked/unchecked boxes
 
 # HOLD Tab
 if tab == "HOLD":
