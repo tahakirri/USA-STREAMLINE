@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+import io
 from PIL import Image
 
 # Ensure a directory exists for storing uploaded images
@@ -68,18 +69,23 @@ st.markdown("""
 REQUEST_FILE = 'request_data.csv'
 MISTAKE_FILE = 'mistake_data.csv'
 
+# Ensure files exist
+for file in [REQUEST_FILE, MISTAKE_FILE]:
+    if not os.path.exists(file):
+        pd.DataFrame().to_csv(file, index=False)
+
 # Load request data with Completed column
-if os.path.exists(REQUEST_FILE):
+try:
     request_data = pd.read_csv(REQUEST_FILE)
     if "Completed" not in request_data.columns:
         request_data["Completed"] = False
-else:
+except pd.errors.EmptyDataError:
     request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
 
 # Load mistake data
-if os.path.exists(MISTAKE_FILE):
+try:
     mistake_data = pd.read_csv(MISTAKE_FILE)
-else:
+except pd.errors.EmptyDataError:
     mistake_data = pd.DataFrame(columns=["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"])
 
 # Sidebar for navigation with icons
@@ -177,22 +183,36 @@ if section == "🖼️ HOLD":
     uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
     
     if uploaded_image:
-        # Open and save the uploaded image
-        image = Image.open(uploaded_image)
+        try:
+            # Open the image
+            image = Image.open(uploaded_image)
+            
+            # Convert image to RGB mode if it's not already
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
+            
+            # Save the image with explicit write permissions
+            image.save(LATEST_IMAGE_PATH, quality=85)
+            
+            # Display the uploaded image
+            st.image(image, caption="📸 Uploaded Image", use_container_width=True)
+            st.success("✅ Image uploaded successfully!")
         
-        # Save the image to the latest image path
-        image.save(LATEST_IMAGE_PATH)
-        
-        # Display the uploaded image
-        st.image(image, caption="📸 Uploaded Image", use_container_width=True)
-        st.success("✅ Image uploaded successfully!")
+        except Exception as e:
+            st.error(f"❌ Error uploading image: {str(e)}")
 
     if st.button("🔍 CHECK HOLD"):
         # Check if the latest image exists
         if os.path.exists(LATEST_IMAGE_PATH):
-            # Open and display the latest image
-            latest_image = Image.open(LATEST_IMAGE_PATH)
-            st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
+            try:
+                # Open and display the latest image
+                latest_image = Image.open(LATEST_IMAGE_PATH)
+                st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error displaying image: {str(e)}")
         else:
             st.write("❌ No image uploaded.")
 
