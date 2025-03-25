@@ -68,124 +68,145 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Theme Management ---
-with st.sidebar:
-    st.markdown("### 🧭 Navigation")
-    section = st.radio("Choose Section", [
-        "📋 Request", 
-        "🖼️ HOLD", 
-        "❌ Ticket Mistakes"
-    ])
-    
-    # Theme toggle
-    dark_mode = st.toggle("🌙 Dark Mode", value=True)
-
-# Theme CSS
-if dark_mode:
-    theme_css = """
-    <style>
-        :root {
-            --primary-text: #ffffff;
-            --secondary-text: #f0f0f0;
-            --background: #0e1117;
-            --sidebar: #1e2129;
-            --header: #4db8ff;
-            --input-bg: #2c2f36;
-            --input-border: #4a4e57;
-            --input-text: #ffffff;
-            --button-bg: #4db8ff;
-            --button-hover: #3aa0ff;
-            --button-text: #ffffff;
-            --table-bg: #1e2129;
-            --table-text: #ffffff;
-        }
-    </style>
-    """
-else:
-    theme_css = """
-    <style>
-        :root {
-            --primary-text: #000000;
-            --secondary-text: #333333;
-            --background: #ffffff;
-            --sidebar: #f0f2f6;
-            --header: #0068c9;
-            --input-bg: #ffffff;
-            --input-border: #d1d5db;
-            --input-text: #000000;
-            --button-bg: #0068c9;
-            --button-hover: #0055a5;
-            --button-text: #ffffff;
-            --table-bg: #ffffff;
-            --table-text: #000000;
-        }
-    </style>
-    """
-
-common_css = """
+# Inject Tailwind CSS
+st.markdown("""
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
     .stApp {
-        background-color: var(--background);
-        color: var(--primary-text);
+        background-color: #f3f4f6;
     }
     [data-testid="stSidebar"] {
-        background-color: var(--sidebar);
-    }
-    h1, h2, h3, h4 {
-        color: var(--header);
+        background-color: #1f2937;
     }
     .stTextInput > div > div > input, 
     .stSelectbox > div > div > div > select,
     .stTextArea > div > div > textarea {
-        background-color: var(--input-bg);
-        color: var(--input-text);
-        border: 1px solid var(--input-border);
-    }
-    .dataframe {
-        background-color: var(--table-bg);
-        color: var(--table-text);
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 0.375rem;
+        padding: 0.5rem;
     }
     .stButton > button {
-        background-color: var(--button-bg);
-        color: var(--button-text);
-        border: none;
+        background-color: #3b82f6;
+        color: white;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
     }
     .stButton > button:hover {
-        background-color: var(--button-hover);
+        background-color: #2563eb;
     }
-    .stCheckbox label, .stRadio label, 
-    .stTextInput label, .stTextArea label {
-        color: var(--primary-text) !important;
+    .stDataFrame {
+        border-radius: 0.375rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     }
 </style>
-"""
+""", unsafe_allow_html=True)
 
-st.markdown(theme_css + common_css, unsafe_allow_html=True)
+# --- Sidebar Navigation ---
+with st.sidebar:
+    st.markdown("""
+    <div class="mb-6">
+        <h3 class="text-xl font-semibold text-white mb-4">🧭 Navigation</h3>
+        <div class="space-y-2">
+    """, unsafe_allow_html=True)
+    
+    section = st.radio(
+        "Choose Section",
+        ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes"],
+        label_visibility="collapsed"
+    )
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    # Theme toggle
+    dark_mode = st.toggle("🌙 Dark Mode", value=True)
+    
+    # Developer options
+    if st.checkbox("Show Developer Options"):
+        st.markdown('<div class="mt-6 p-4 bg-gray-800 rounded-lg">', unsafe_allow_html=True)
+        if st.button("⚠️ Initialize Database"):
+            init_db()
+            st.success("Database initialized!")
+        
+        if st.button("🔄 Export Requests to CSV"):
+            df = get_requests_df()
+            st.download_button(
+                "Download Requests",
+                df.to_csv(index=False),
+                "requests_export.csv"
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# Apply dark mode if selected
+if dark_mode:
+    st.markdown("""
+    <style>
+        .stApp {
+            background-color: #111827;
+            color: #f3f4f6;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #1f2937;
+        }
+        .stTextInput > div > div > input, 
+        .stSelectbox > div > div > div > select,
+        .stTextArea > div > div > textarea {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            border-color: #374151;
+        }
+        .stButton > button {
+            background-color: #2563eb;
+        }
+        .stButton > button:hover {
+            background-color: #1d4ed8;
+        }
+        .stCheckbox label, .stRadio label, 
+        .stTextInput label, .stTextArea label {
+            color: #f3f4f6 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- Request Section ---
 if section == "📋 Request":
-    st.header("📋 Request Section")
+    st.markdown("""
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-blue-600 mb-4">📋 Request Section</h1>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns([3, 2])
     
     with col1:
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         agent_name_input = st.text_input("👤 Agent Name", key="agent_name")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         type_input = st.selectbox("🔍 Type", ["Email", "Phone Number", "Ticket ID"], key="type")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         id_input = st.text_input("🆔 ID", key="id")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        comment_input = st.text_area("💬 Comment", height=150, key="comment")  
+        st.markdown('<div class="mb-4 h-full">', unsafe_allow_html=True)
+        comment_input = st.text_area("💬 Comment", height=150, key="comment")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     
     with btn_col1:
-        submit_button = st.button("✅ Submit Data")
+        submit_button = st.button("✅ Submit Data", use_container_width=True)
     
     with btn_col2:
-        refresh_button = st.button("🔄 Refresh Data")
+        refresh_button = st.button("🔄 Refresh Data", use_container_width=True)
     
     with btn_col3:
-        clear_button = st.button("🗑️ Clear Data")
+        clear_button = st.button("🗑️ Clear Data", use_container_width=True)
     
     if clear_button:
         clear_password = st.text_input("🔐 Enter password to clear data:", type="password", key="clear_password")
@@ -208,7 +229,12 @@ if section == "📋 Request":
 
     request_data = get_requests_df()
     if not request_data.empty:
-        st.write("### 📋 Submitted Requests:")
+        st.markdown("""
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold text-blue-600 mb-2">📋 Submitted Requests:</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
         edited_df = st.data_editor(
             request_data,
             column_config={
@@ -232,8 +258,15 @@ if section == "📋 Request":
 
 # --- HOLD Section ---
 elif section == "🖼️ HOLD":
-    st.header("🖼️ HOLD Section")
+    st.markdown("""
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-blue-600 mb-4">🖼️ HOLD Section</h1>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
     uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_image:
         try:
@@ -242,16 +275,21 @@ elif section == "🖼️ HOLD":
                 image = image.convert('RGB')
             os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
             image.save(LATEST_IMAGE_PATH, quality=85)
+            
+            st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
             st.image(image, caption="📸 Uploaded Image", use_container_width=True)
             st.success("✅ Image uploaded successfully!")
+            st.markdown('</div>', unsafe_allow_html=True)
         except Exception as e:
             st.error(f"❌ Error uploading image: {str(e)}")
 
-    if st.button("🔍 CHECK HOLD"):
+    if st.button("🔍 CHECK HOLD", use_container_width=True):
         if os.path.exists(LATEST_IMAGE_PATH):
             try:
                 latest_image = Image.open(LATEST_IMAGE_PATH)
+                st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
                 st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"❌ Error displaying image: {str(e)}")
         else:
@@ -259,25 +297,39 @@ elif section == "🖼️ HOLD":
 
 # --- Mistakes Section ---
 elif section == "❌ Ticket Mistakes":
-    st.header("❌ Ticket Mistakes Section")
+    st.markdown("""
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-blue-600 mb-4">❌ Ticket Mistakes Section</h1>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns([3, 2])  
     
     with col1:
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         team_leader_input = st.text_input("👥 Team Leader Name", key="team_leader")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         agent_name_mistake_input = st.text_input("👤 Agent Name", key="agent_name_mistake")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
         ticket_id_input = st.text_input("🆔 Ticket ID", key="ticket_id")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
+        st.markdown('<div class="mb-4 h-full">', unsafe_allow_html=True)
         error_input = st.text_area("⚠️ Error", height=150, key="error")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     btn_col1, btn_col2 = st.columns(2)
     
     with btn_col1:
-        submit_mistake_button = st.button("✅ Submit Mistake")
+        submit_mistake_button = st.button("✅ Submit Mistake", use_container_width=True)
     
     with btn_col2:
-        refresh_mistake_button = st.button("🔄 Refresh Mistakes")
+        refresh_mistake_button = st.button("🔄 Refresh Mistakes", use_container_width=True)
     
     if submit_mistake_button:
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
@@ -295,20 +347,9 @@ elif section == "❌ Ticket Mistakes":
 
     mistake_data = get_mistakes_df()
     if not mistake_data.empty:
-        st.write("❌ Mistakes Table:")
+        st.markdown("""
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold text-blue-600 mb-2">❌ Mistakes Table:</h2>
+        </div>
+        """, unsafe_allow_html=True)
         st.dataframe(mistake_data, use_container_width=True)
-
-# --- Migration Utility (One-time use) ---
-with st.sidebar:
-    if st.checkbox("Show Developer Options"):
-        if st.button("⚠️ Initialize Database"):
-            init_db()
-            st.success("Database initialized!")
-        
-        if st.button("🔄 Export Requests to CSV"):
-            df = get_requests_df()
-            st.download_button(
-                "Download Requests",
-                df.to_csv(index=False),
-                "requests_export.csv"
-            )
