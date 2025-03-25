@@ -15,7 +15,6 @@ LATEST_IMAGE_PATH = os.path.join(UPLOAD_DIRECTORY, 'latest_hold_image.jpg')
 def init_db():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         cursor = conn.cursor()
-        # Requests table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +26,6 @@ def init_db():
                 timestamp TEXT NOT NULL
             )
         ''')
-        # Mistakes table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,171 +66,225 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inject Tailwind CSS
+# --- Professional CSS Styling ---
 st.markdown("""
-<script src="https://cdn.tailwindcss.com"></script>
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --sidebar: #1e293b;
+        --sidebar-hover: #334155;
+        --background: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --text-light: #64748b;
+        --border: #e2e8f0;
+    }
+    
+    body {
+        font-family: 'Inter', sans-serif;
+    }
+    
     .stApp {
-        background-color: #f3f4f6;
+        background-color: var(--background);
     }
+    
     [data-testid="stSidebar"] {
-        background-color: #1f2937;
+        background-color: var(--sidebar) !important;
+        border-right: 1px solid var(--sidebar-hover);
     }
-    .stTextInput > div > div > input, 
-    .stSelectbox > div > div > div > select,
-    .stTextArea > div > div > textarea {
-        background-color: #ffffff;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
-        padding: 0.5rem;
+    
+    .sidebar .nav-item {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        margin-bottom: 4px;
+        transition: all 0.2s;
+        color: #e2e8f0;
     }
-    .stButton > button {
-        background-color: #3b82f6;
+    
+    .sidebar .nav-item:hover {
+        background-color: var(--sidebar-hover);
+    }
+    
+    .sidebar .nav-item.active {
+        background-color: var(--primary);
         color: white;
-        border-radius: 0.375rem;
+    }
+    
+    .sidebar .nav-icon {
+        margin-right: 10px;
+        font-size: 18px;
+    }
+    
+    .stButton>button {
+        background-color: var(--primary);
+        color: white;
+        border-radius: 6px;
         padding: 0.5rem 1rem;
         font-weight: 500;
+        transition: all 0.2s;
+        border: none;
     }
-    .stButton > button:hover {
-        background-color: #2563eb;
+    
+    .stButton>button:hover {
+        background-color: var(--primary-hover);
+        transform: translateY(-1px);
     }
+    
+    .stTextInput>div>div>input,
+    .stSelectbox>div>div>select,
+    .stTextArea>div>div>textarea {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 12px;
+    }
+    
+    .card {
+        background-color: var(--card);
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        border: 1px solid var(--border);
+    }
+    
+    h1 {
+        color: var(--text);
+        font-weight: 600;
+        font-size: 1.8rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    h2 {
+        color: var(--text);
+        font-weight: 600;
+        font-size: 1.4rem;
+        margin-bottom: 1rem;
+    }
+    
     .stDataFrame {
-        border-radius: 0.375rem;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+    }
+    
+    .icon-lg {
+        font-size: 24px;
+        vertical-align: middle;
+        margin-right: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Sidebar Navigation ---
+# --- Minimalist Sidebar ---
 with st.sidebar:
     st.markdown("""
-    <div class="mb-6">
-        <h3 class="text-xl font-semibold text-white mb-4">🧭 Navigation</h3>
-        <div class="space-y-2">
+    <div style="padding: 1rem 0 2rem 0;">
+        <h2 style="color: white; font-weight: 600; font-size: 1.2rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+            <span class="icon-lg">📊</span>Collab Dashboard
+        </h2>
+        <div class="sidebar">
     """, unsafe_allow_html=True)
     
-    section = st.radio(
-        "Choose Section",
-        ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes"],
-        label_visibility="collapsed"
-    )
+    nav_options = {
+        "📋 Request": "request",
+        "🖼️ Media": "hold",
+        "⚠️ Mistakes": "mistakes"
+    }
+    
+    for icon, label in nav_options.items():
+        active = "active" if section.lower() in label else ""
+        st.markdown(f"""
+        <div class="nav-item {active}" onclick="window.location.href='?section={label}'" style="cursor: pointer;">
+            <span class="nav-icon">{icon}</span>{label.capitalize()}
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("</div></div>", unsafe_allow_html=True)
     
-    # Theme toggle
-    dark_mode = st.toggle("🌙 Dark Mode", value=True)
+    # Minimalist dark mode toggle
+    dark_mode = st.checkbox("Dark Mode", value=False, key="dark_mode")
     
-    # Developer options
-    if st.checkbox("Show Developer Options"):
-        st.markdown('<div class="mt-6 p-4 bg-gray-800 rounded-lg">', unsafe_allow_html=True)
-        if st.button("⚠️ Initialize Database"):
-            init_db()
-            st.success("Database initialized!")
-        
-        if st.button("🔄 Export Requests to CSV"):
-            df = get_requests_df()
-            st.download_button(
-                "Download Requests",
-                df.to_csv(index=False),
-                "requests_export.csv"
-            )
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Add subtle footer
+    st.markdown("""
+    <div style="position: absolute; bottom: 1rem; left: 1rem; right: 1rem; color: #94a3b8; font-size: 0.8rem; border-top: 1px solid #334155; padding-top: 1rem;">
+        USA Collab v1.0
+    </div>
+    """, unsafe_allow_html=True)
 
 # Apply dark mode if selected
 if dark_mode:
     st.markdown("""
     <style>
-        .stApp {
-            background-color: #111827;
-            color: #f3f4f6;
+        :root {
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --sidebar: #0f172a;
+            --sidebar-hover: #1e293b;
+            --background: #020617;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --text-light: #94a3b8;
+            --border: #334155;
         }
-        [data-testid="stSidebar"] {
-            background-color: #1f2937;
-        }
-        .stTextInput > div > div > input, 
-        .stSelectbox > div > div > div > select,
-        .stTextArea > div > div > textarea {
-            background-color: #1f2937;
-            color: #f3f4f6;
-            border-color: #374151;
-        }
-        .stButton > button {
-            background-color: #2563eb;
-        }
-        .stButton > button:hover {
-            background-color: #1d4ed8;
-        }
-        .stCheckbox label, .stRadio label, 
-        .stTextInput label, .stTextArea label {
-            color: #f3f4f6 !important;
+        
+        .stDataFrame {
+            background-color: #1e293b !important;
+            color: white !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
 # --- Request Section ---
-if section == "📋 Request":
+if "request" in section.lower():
     st.markdown("""
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-blue-600 mb-4">📋 Request Section</h1>
-    </div>
+    <div class="card">
+        <h1><span class="icon-lg">📋</span>Request Management</h1>
     """, unsafe_allow_html=True)
-
-    col1, col2 = st.columns([3, 2])
     
-    with col1:
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        agent_name_input = st.text_input("👤 Agent Name", key="agent_name")
-        st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        col1, col2 = st.columns([3, 2])
         
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        type_input = st.selectbox("🔍 Type", ["Email", "Phone Number", "Ticket ID"], key="type")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col1:
+            agent_name_input = st.text_input("Agent Name", key="agent_name")
+            type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
+            id_input = st.text_input("Identifier", key="id")
         
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        id_input = st.text_input("🆔 ID", key="id")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<div class="mb-4 h-full">', unsafe_allow_html=True)
-        comment_input = st.text_area("💬 Comment", height=150, key="comment")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            comment_input = st.text_area("Comments", height=150, key="comment")
     
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     
     with btn_col1:
-        submit_button = st.button("✅ Submit Data", use_container_width=True)
+        if st.button("Submit Request", use_container_width=True):
+            if not agent_name_input or not id_input or not comment_input:
+                st.error("Please fill all required fields")
+            else:
+                execute_query('''
+                    INSERT INTO requests (agent_name, type, identifier, comment, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (agent_name_input, type_input, id_input, comment_input, 
+                      datetime.now().strftime("%H:%M:%S")))
+                st.success("Request submitted successfully")
     
     with btn_col2:
-        refresh_button = st.button("🔄 Refresh Data", use_container_width=True)
+        if st.button("Refresh Data", use_container_width=True):
+            st.rerun()
     
     with btn_col3:
-        clear_button = st.button("🗑️ Clear Data", use_container_width=True)
-    
-    if clear_button:
-        clear_password = st.text_input("🔐 Enter password to clear data:", type="password", key="clear_password")
-        if clear_password == "wipe":
-            execute_query("DELETE FROM requests")
-            st.success("✅ Request data has been cleared!")
-        elif clear_password:
-            st.error("❌ Incorrect password")
-    
-    if submit_button:
-        if not agent_name_input or not id_input or not comment_input:
-            st.error("❗ Please fill out all fields.")
-        else:
-            execute_query('''
-                INSERT INTO requests (agent_name, type, identifier, comment, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (agent_name_input, type_input, id_input, comment_input, 
-                  datetime.now().strftime("%H:%M:%S")))
-            st.success("✅ Data Submitted!")
+        if st.button("Clear Data", use_container_width=True):
+            clear_password = st.text_input("Enter admin password:", type="password", key="clear_password")
+            if clear_password == "wipe":
+                execute_query("DELETE FROM requests")
+                st.success("Database cleared")
+            elif clear_password:
+                st.error("Incorrect password")
 
     request_data = get_requests_df()
     if not request_data.empty:
         st.markdown("""
-        <div class="mb-4">
-            <h2 class="text-xl font-semibold text-blue-600 mb-2">📋 Submitted Requests:</h2>
-        </div>
+        <div class="card" style="margin-top: 1.5rem;">
+            <h2><span class="icon-lg">📄</span>Recent Requests</h2>
         """, unsafe_allow_html=True)
         
         edited_df = st.data_editor(
@@ -240,7 +292,7 @@ if section == "📋 Request":
             column_config={
                 "id": None,
                 "completed": st.column_config.CheckboxColumn(
-                    "✅ Completed",
+                    "Completed",
                     help="Mark request as completed",
                     default=False
                 )
@@ -249,107 +301,114 @@ if section == "📋 Request":
             use_container_width=True
         )
         
-        # Update completed status
         for _, row in edited_df.iterrows():
             execute_query(
                 'UPDATE requests SET completed = ? WHERE id = ?',
                 (row['completed'], row['id'])
             )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # --- HOLD Section ---
-elif section == "🖼️ HOLD":
+elif "hold" in section.lower():
     st.markdown("""
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-blue-600 mb-4">🖼️ HOLD Section</h1>
-    </div>
+    <div class="card">
+        <h1><span class="icon-lg">🖼️</span>Media Management</h1>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
-    uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    if uploaded_image:
-        try:
-            image = Image.open(uploaded_image)
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
-            image.save(LATEST_IMAGE_PATH, quality=85)
-            
-            st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
-            st.image(image, caption="📸 Uploaded Image", use_container_width=True)
-            st.success("✅ Image uploaded successfully!")
-            st.markdown('</div>', unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"❌ Error uploading image: {str(e)}")
-
-    if st.button("🔍 CHECK HOLD", use_container_width=True):
-        if os.path.exists(LATEST_IMAGE_PATH):
+    with st.container():
+        st.markdown("""
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <h2>Upload Media</h2>
+        """, unsafe_allow_html=True)
+        
+        uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        
+        if uploaded_image:
             try:
-                latest_image = Image.open(LATEST_IMAGE_PATH)
-                st.markdown('<div class="mb-4 p-4 bg-white rounded-lg shadow">', unsafe_allow_html=True)
-                st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                image = Image.open(uploaded_image)
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+                os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
+                image.save(LATEST_IMAGE_PATH, quality=85)
+                
+                st.image(image, caption="Uploaded Image", use_container_width=True)
+                st.success("Image uploaded successfully")
             except Exception as e:
-                st.error(f"❌ Error displaying image: {str(e)}")
-        else:
-            st.write("❌ No image uploaded.")
+                st.error(f"Error uploading image: {str(e)}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        if st.button("View Latest Upload", use_container_width=True):
+            if os.path.exists(LATEST_IMAGE_PATH):
+                try:
+                    latest_image = Image.open(LATEST_IMAGE_PATH)
+                    st.image(latest_image, caption="Latest Upload", use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error displaying image: {str(e)}")
+            else:
+                st.warning("No image available")
 
 # --- Mistakes Section ---
-elif section == "❌ Ticket Mistakes":
+elif "mistakes" in section.lower():
     st.markdown("""
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-blue-600 mb-4">❌ Ticket Mistakes Section</h1>
-    </div>
+    <div class="card">
+        <h1><span class="icon-lg">⚠️</span>Error Tracking</h1>
     """, unsafe_allow_html=True)
-
-    col1, col2 = st.columns([3, 2])  
     
-    with col1:
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        team_leader_input = st.text_input("👥 Team Leader Name", key="team_leader")
-        st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        col1, col2 = st.columns([3, 2])
         
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        agent_name_mistake_input = st.text_input("👤 Agent Name", key="agent_name_mistake")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col1:
+            team_leader_input = st.text_input("Team Leader", key="team_leader")
+            agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
+            ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
         
-        st.markdown('<div class="mb-4">', unsafe_allow_html=True)
-        ticket_id_input = st.text_input("🆔 Ticket ID", key="ticket_id")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with col2:
+            error_input = st.text_area("Error Description", height=150, key="error")
     
-    with col2:
-        st.markdown('<div class="mb-4 h-full">', unsafe_allow_html=True)
-        error_input = st.text_area("⚠️ Error", height=150, key="error")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    btn_col1, btn_col2 = st.columns(2)
-    
-    with btn_col1:
-        submit_mistake_button = st.button("✅ Submit Mistake", use_container_width=True)
-    
-    with btn_col2:
-        refresh_mistake_button = st.button("🔄 Refresh Mistakes", use_container_width=True)
-    
-    if submit_mistake_button:
+    if st.button("Submit Error Report", use_container_width=True):
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
-            st.error("❗ Please fill out all fields.")
+            st.error("Please fill all required fields")
         else:
             execute_query('''
                 INSERT INTO mistakes (team_leader, agent_name, ticket_id, error, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             ''', (team_leader_input, agent_name_mistake_input, ticket_id_input, 
                   error_input, datetime.now().strftime("%H:%M:%S")))
-            st.success("✅ Mistake Submitted!")
-
-    if refresh_mistake_button:
-        st.rerun()
+            st.success("Error report submitted")
 
     mistake_data = get_mistakes_df()
     if not mistake_data.empty:
         st.markdown("""
-        <div class="mb-4">
-            <h2 class="text-xl font-semibold text-blue-600 mb-2">❌ Mistakes Table:</h2>
-        </div>
+        <div class="card" style="margin-top: 1.5rem;">
+            <h2><span class="icon-lg">📊</span>Recent Errors</h2>
         """, unsafe_allow_html=True)
-        st.dataframe(mistake_data, use_container_width=True)
+        
+        st.dataframe(
+            mistake_data,
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Hidden Developer Tools ---
+with st.sidebar:
+    if st.checkbox("Developer Tools", key="dev_tools"):
+        st.markdown('<div class="card" style="padding: 1rem; margin-top: 1rem;">', unsafe_allow_html=True)
+        
+        if st.button("Initialize Database"):
+            init_db()
+            st.success("Database initialized")
+        
+        if st.button("Export Data to CSV"):
+            df = get_requests_df()
+            st.download_button(
+                "Download CSV",
+                df.to_csv(index=False),
+                "requests_export.csv",
+                use_container_width=True
+            )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
