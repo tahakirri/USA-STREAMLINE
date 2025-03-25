@@ -4,11 +4,11 @@ from datetime import datetime
 import os
 from PIL import Image
 
-# Define CSV file paths
-REQUEST_FILE = 'request_data.csv'
-MISTAKE_FILE = 'mistake_data.csv'
+# Define file paths for different sections
+REQUEST_FILE = 'requests.csv'
+MISTAKE_FILE = 'mistakes.csv'
 
-# Load request data (with 'Completed' column)
+# Load request data
 if os.path.exists(REQUEST_FILE):
     request_data = pd.read_csv(REQUEST_FILE)
 else:
@@ -16,10 +16,7 @@ else:
 
 # Ensure 'Completed' column exists
 if "Completed" not in request_data.columns:
-    request_data["Completed"] = False  # Default to False
-
-# Convert 'Completed' column to boolean (fix dtype issues)
-request_data["Completed"] = request_data["Completed"].astype(bool)
+    request_data["Completed"] = False
 
 # Load mistake data
 if os.path.exists(MISTAKE_FILE):
@@ -27,7 +24,7 @@ if os.path.exists(MISTAKE_FILE):
 else:
     mistake_data = pd.DataFrame(columns=["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"])
 
-# Streamlit settings
+# Streamlit interface settings
 st.set_page_config(page_title="USA Collab", layout="wide")  
 st.title("USA Collab")
 st.markdown("<hr>", unsafe_allow_html=True)
@@ -40,19 +37,22 @@ with st.sidebar:
 # Request Tab
 if section == "Request":
     st.header("Request Section")
-
-    col1, col2 = st.columns([3, 2])
+    
+    # Layout with columns for better alignment
+    col1, col2 = st.columns([3, 2])  
     
     with col1:
-        agent_name_input = st.text_input("Agent Name", key="agent_name")
-        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
-        id_input = st.text_input("ID", key="id")
+        agent_name_input = st.text_input("Agent Name")
+        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
+        id_input = st.text_input("ID")
     
     with col2:
-        comment_input = st.text_area("Comment", height=150, key="comment")  
+        comment_input = st.text_area("Comment", height=150)
     
+    # Buttons
     submit_button = st.button("Submit Data")
-
+    refresh_button = st.button("Refresh Data")
+    
     if submit_button:
         if not agent_name_input or not id_input or not comment_input:
             st.error("Please fill out all fields.")
@@ -69,25 +69,23 @@ if section == "Request":
             request_data = pd.concat([request_data, new_row], ignore_index=True)
             request_data.to_csv(REQUEST_FILE, index=False)
             st.success("Data Submitted!")
-            st.experimental_rerun()  # Refresh page after submission
+            st.rerun()  # Refresh the app
 
-    st.write("Latest Submitted Data:")
+    if refresh_button:
+        st.rerun()
 
-    # Display requests with checkboxes
-    updated = False  # Track if any checkbox was changed
-    for i in range(len(request_data)):
-        col1, col2 = st.columns([0.1, 0.9])
-        with col1:
-            checked = st.checkbox(f"✅", value=request_data.loc[i, "Completed"], key=f"chk_{i}")
-            if checked != request_data.loc[i, "Completed"]:
-                request_data.at[i, "Completed"] = checked
-                updated = True  # Mark as updated
+    # Display stored requests with checkboxes for completion
+    if not request_data.empty:
+        st.write("### Submitted Requests:")
+        for index, row in request_data.iterrows():
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"**{row['Agent Name']}** - {row['TYPE']} - {row['ID']} - {row['COMMENT']} ({row['Timestamp']})")
+            with col2:
+                checked = st.checkbox("Completed", value=row["Completed"], key=f"chk_{index}")
+                request_data.at[index, "Completed"] = checked
         
-        with col2:
-            st.write(f"**{request_data.loc[i, 'Agent Name']}** - {request_data.loc[i, 'TYPE']} - {request_data.loc[i, 'ID']}")
-
-    # Save changes if any checkbox was updated
-    if updated:
+        # Save the updated checkbox states
         request_data.to_csv(REQUEST_FILE, index=False)
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -95,7 +93,7 @@ if section == "Request":
 # HOLD Tab
 if section == "HOLD":
     st.header("HOLD Section")
-    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
     
     if uploaded_image:
         image = Image.open(uploaded_image)
@@ -111,19 +109,22 @@ if section == "HOLD":
 # Ticket Mistakes Tab
 if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
-
+    
+    # Layout with columns for better alignment
     col1, col2 = st.columns([3, 2])  
     
     with col1:
-        team_leader_input = st.text_input("Team Leader Name", key="team_leader")
-        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
-        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
+        team_leader_input = st.text_input("Team Leader Name")
+        agent_name_mistake_input = st.text_input("Agent Name")
+        ticket_id_input = st.text_input("Ticket ID")
     
     with col2:
-        error_input = st.text_area("Error", height=150, key="error")
+        error_input = st.text_area("Error", height=150)
     
+    # Buttons
     submit_mistake_button = st.button("Submit Mistake")
-
+    refresh_mistake_button = st.button("Refresh Mistakes")
+    
     if submit_mistake_button:
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
             st.error("Please fill out all fields.")
@@ -139,8 +140,14 @@ if section == "Ticket Mistakes":
             mistake_data = pd.concat([mistake_data, new_row], ignore_index=True)
             mistake_data.to_csv(MISTAKE_FILE, index=False)
             st.success("Mistake Submitted!")
+            st.rerun()  
 
-    st.write("Mistakes Table:")
-    st.dataframe(mistake_data)
+    if refresh_mistake_button:
+        st.rerun()
+
+    # Display mistakes
+    if not mistake_data.empty:
+        st.write("### Mistakes Table:")
+        st.dataframe(mistake_data)
 
     st.markdown("<hr>", unsafe_allow_html=True)
