@@ -109,28 +109,28 @@ if tab == "Request":
             submit_data(agent_name_input, type_input, id_input, comment_input)
             st.write("Data Submitted!")
             st.write("Latest Submitted Data:")
-            st.write(data.tail(1))
-            # Avoid rerun here, just refresh manually
-            st.experimental_rerun()  # Trigger manual refresh after submission
+            st.write(data.tail(1))  # Show the latest row
     
-    st.write("Data Table:")
-    for index, row in data.iterrows():
-        col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
-        col1.write(row["Agent Name"])
-        col2.write(row["TYPE"])
-        col3.write(row["ID"])
-        col4.write(row["COMMENT"])
-        col5.write(row["Timestamp"])
-        
-        # Use session state to manage the checkbox state
-        if f"checkbox_{index}" not in st.session_state:
-            st.session_state[f"checkbox_{index}"] = row["Completed"]
-        
-        completed = col6.checkbox("Done", value=st.session_state[f"checkbox_{index}"], key=index)
-        
-        if completed != st.session_state[f"checkbox_{index}"]:
-            st.session_state[f"checkbox_{index}"] = completed
-            update_completion(index)
+    # Refresh Button
+    if st.button("Refresh Data"):
+        st.write("Data Table:")
+        for index, row in data.iterrows():
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
+            col1.write(row["Agent Name"])
+            col2.write(row["TYPE"])
+            col3.write(row["ID"])
+            col4.write(row["COMMENT"])
+            col5.write(row["Timestamp"])
+            
+            # Use session state to manage the checkbox state
+            if f"checkbox_{index}" not in st.session_state:
+                st.session_state[f"checkbox_{index}"] = row["Completed"]
+            
+            completed = col6.checkbox("Done", value=st.session_state[f"checkbox_{index}"], key=index)
+            
+            if completed != st.session_state[f"checkbox_{index}"]:
+                st.session_state[f"checkbox_{index}"] = completed
+                update_completion(index)
 
 # HOLD Tab
 if tab == "HOLD":
@@ -162,8 +162,7 @@ if tab == "Ticket Mistakes":
             submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
             st.write("Mistake Submitted!")
             st.write("Latest Submitted Mistake:")
-            st.write(ticket_mistakes.tail(1))
-            st.experimental_rerun()  # Trigger manual refresh after submission
+            st.write(ticket_mistakes.tail(1))  # Show the latest row
     
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
