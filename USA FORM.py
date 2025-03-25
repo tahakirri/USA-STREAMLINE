@@ -76,17 +76,18 @@ if tab == "Request":
             col4.write(row["COMMENT"])
             col5.write(row["Timestamp"])
             
-            # Using radio buttons to set "Completed" status
-            completed_status = col6.radio(
-                "Status",
-                ["Not Completed", "Completed"],
-                index=0 if row["Completed"] == "Not Completed" else 1,
-                key=f"status_{index}"
-            )
+            # Using a toggle button for "Completed" status
+            completed_status = st.session_state.get(f"status_{index}", row["Completed"])  # Retrieve current status from session_state
             
-            # Update the completion status if changed
-            if completed_status != row["Completed"]:
-                update_completion(index, completed_status)
+            # Toggle button for the status change
+            if st.button(f"Toggle {row['ID']}", key=f"toggle_{index}"):
+                # Toggle between "Not Completed" and "Completed"
+                new_status = "Completed" if completed_status == "Not Completed" else "Not Completed"
+                update_completion(index, new_status)
+                st.session_state[f"status_{index}"] = new_status  # Save the new status in session_state
+                st.experimental_rerun()  # Trigger a rerun to update the display
+
+            col6.write(completed_status)  # Display the current status
 
 # Ticket Mistakes Tab
 if tab == "Ticket Mistakes":
