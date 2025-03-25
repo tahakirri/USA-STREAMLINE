@@ -11,6 +11,7 @@ TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
 # Load the data from the CSV file if it exists
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
+    data = data.drop(columns=['Completed'], errors='ignore')  # Remove 'Completed' column if exists
 else:
     columns = ["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
     data = pd.DataFrame(columns=columns)
