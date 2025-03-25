@@ -92,7 +92,381 @@ def init_db():
         if conn:
             conn.close()
 
-# [All other database functions remain the same...]
+def authenticate(username, password):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT role FROM users 
+            WHERE username=? AND password=?
+        """, (username, hash_password(password)))
+        user = cursor.fetchone()
+        return user[0] if user else None
+    except sqlite3.Error as e:
+        st.error(f"Authentication error: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def add_request(agent_name, request_type, identifier, comment):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add request: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def add_mistake(team_leader, agent_name, ticket_id, error_description):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add mistake: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_requests():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM requests 
+            ORDER BY completed, timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch requests: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch mistakes: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def update_request_status(request_id, completed):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE requests 
+            SET completed=? 
+            WHERE id=?
+        """, (completed, request_id))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to update request status: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_users():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, role FROM users ORDER BY username")
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_users_except(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username FROM users 
+            WHERE username != ?
+            ORDER BY username
+        """, (username,))
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def create_user(username, password, role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, (username, hash_password(password), role))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to create user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def update_user_role(user_id, new_role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET role=? 
+            WHERE id=?
+        """, (new_role, user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to update user role: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def reset_user_password(user_id, new_password):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET password=? 
+            WHERE id=?
+        """, (hash_password(new_password), user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to reset password: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(user_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to delete user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def add_group_message(sender, message, mentions=None):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO group_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ",".join(mentions) if mentions else ""))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add group message: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def add_private_message(sender, receiver, message):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO private_messages (sender, receiver, message, timestamp) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, receiver, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add private message: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch group messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_private_messages(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM private_messages 
+            WHERE receiver=? OR sender=?
+            ORDER BY timestamp DESC
+            LIMIT 100
+        """, (username, username))
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch private messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def mark_as_read(message_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE private_messages 
+            SET is_read=1 
+            WHERE id=?
+        """, (message_id,))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to mark message as read: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_unread_count(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) FROM private_messages 
+            WHERE receiver=? AND is_read=0
+        """, (username,))
+        return cursor.fetchone()[0]
+    except sqlite3.Error as e:
+        st.error(f"Failed to get unread count: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+def get_conversation_history(user1, user2):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM private_messages 
+            WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
+            ORDER BY timestamp ASC
+        """, (user1, user2, user2, user1))
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch conversation history: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_admins():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM users WHERE role='admin'")
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch admins: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_unread_messages(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM private_messages 
+            WHERE receiver=? AND is_read=0
+            ORDER BY timestamp DESC
+        """, (username,))
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch unread messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def extract_mentions(text):
+    return set(re.findall(r'@(\w+)', text))
+
+def show_notification(message):
+    js = f"""
+    <script>
+        if (Notification.permission === "granted") {{
+            new Notification("{message}");
+        }} else if (Notification.permission !== "denied") {{
+            Notification.requestPermission().then(function(permission) {{
+                if (permission === "granted") {{
+                    new Notification("{message}");
+                }}
+            }});
+        }}
+    </script>
+    """
+    html(js)
 
 # --------------------------
 # Streamlit UI
@@ -240,6 +614,7 @@ else:
         unread_msgs = get_unread_messages(st.session_state.username)
         if unread_msgs:
             st.warning(f"You have {len(unread_msgs)} unread messages!")
+            show_notification(f"You have {len(unread_msgs)} new messages")
         
         tab1, tab2 = st.tabs(["Group Chat", "Private Messages"])
         
