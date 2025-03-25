@@ -30,18 +30,19 @@ def submit_data(agent_name, type_, id_, comment):
         "ID": id_,
         "COMMENT": comment,
         "Timestamp": datetime.now().strftime("%H:%M:%S"),
-        "Completed": False  # Default value for "Completed"
+        "Completed": False
     }
     new_row = pd.DataFrame([new_data])
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
-    return data
+    st.experimental_rerun()  # Force real-time update
 
 # Function to update the completed status
 def update_completion(index):
     global data
     data.at[index, "Completed"] = not data.at[index, "Completed"]
     data.to_csv(DATA_FILE, index=False)
+    st.experimental_rerun()  # Force real-time update
 
 # Function to submit ticket mistakes data
 def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
@@ -56,19 +57,13 @@ def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     new_row = pd.DataFrame([new_mistake])
     ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
     ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
-    return ticket_mistakes
+    st.experimental_rerun()  # Force real-time update
 
-# Function to refresh data (Ensures headers are kept intact)
+# Function to refresh data
 def refresh_data():
-    global data
-    if os.path.exists(DATA_FILE):
-        data = pd.read_csv(DATA_FILE)  # Reload the data to ensure headers are intact
     return data
 
 def refresh_ticket_mistakes():
-    global ticket_mistakes
-    if os.path.exists(TICKET_MISTAKES_FILE):
-        ticket_mistakes = pd.read_csv(TICKET_MISTAKES_FILE)
     return ticket_mistakes
 
 # Initialize image storage
@@ -76,6 +71,23 @@ image_storage = {"image": None}
 
 def check_hold():
     return image_storage["image"]
+
+# Enable Dark Mode
+st.markdown("""
+    <style>
+        body {
+            background-color: #2e2e2e;
+            color: white;
+        }
+        .stTextInput>label, .stTextArea>label, .stSelectbox>label, .stRadio>label, .stButton>label {
+            color: white;
+        }
+        .stButton>button {
+            background-color: #333;
+            color: white;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Streamlit interface
 st.title("USA Collab")
@@ -86,23 +98,34 @@ tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"])
 # Request Tab
 if tab == "Request":
     st.header("Request Section")
+    
     agent_name_input = st.text_input("Agent Name")
     type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
     id_input = st.text_input("ID")
     comment_input = st.text_area("Comment")
     
+    # Data Validation: Ensure fields are not empty
     if st.button("Submit Data"):
-        data = submit_data(agent_name_input, type_input, id_input, comment_input)
-        st.write("Data Submitted!")
-        st.write("Latest Submitted Data:")
-        st.write(data.tail(1))
+        if not agent_name_input or not id_input or not comment_input:
+            st.error("Please fill in all fields.")
+        else:
+            submit_data(agent_name_input, type_input, id_input, comment_input)
+            st.write("Data Submitted!")
+            st.write("Latest Submitted Data:")
+            st.write(data.tail(1))
     
     if st.button("Refresh Data"):
-        data = refresh_data()  # Reload data to maintain headers
         st.write("Data Table:")
-        
-        # Display data as a table in the same format as "Ticket Mistakes"
-        st.write(data)
+        for index, row in data.iterrows():
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
+            col1.write(row["Agent Name"])
+            col2.write(row["TYPE"])
+            col3.write(row["ID"])
+            col4.write(row["COMMENT"])
+            col5.write(row["Timestamp"])
+            completed = col6.checkbox("Done", row["Completed"], key=index)
+            if completed != row["Completed"]:
+                update_completion(index)
 
 # HOLD Tab
 if tab == "HOLD":
@@ -128,10 +151,13 @@ if tab == "Ticket Mistakes":
     error_input = st.text_area("Error")
     
     if st.button("Submit Mistake"):
-        ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
-        st.write("Mistake Submitted!")
-        st.write("Latest Submitted Mistake:")
-        st.write(ticket_mistakes.tail(1))
+        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
+            st.error("Please fill in all fields.")
+        else:
+            submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
+            st.write("Mistake Submitted!")
+            st.write("Latest Submitted Mistake:")
+            st.write(ticket_mistakes.tail(1))
     
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
