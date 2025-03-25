@@ -173,11 +173,11 @@ if section == "🖼️ HOLD":
     
     if uploaded_image:
         image = Image.open(uploaded_image)
-        st.image(image, caption="📸 Uploaded Image", use_column_width=True)
+        st.image(image, caption="📸 Uploaded Image", use_container_width=True)
 
     if st.button("🔍 CHECK HOLD"):
         if uploaded_image:
-            st.image(image, caption="📸 Latest Uploaded Image", use_column_width=True)
+            st.image(image, caption="📸 Latest Uploaded Image", use_container_width=True)
         else:
             st.write("❌ No image uploaded.")
 
