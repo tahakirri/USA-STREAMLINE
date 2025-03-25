@@ -46,8 +46,31 @@ st.markdown("""
 
         /* Table styling */
         .stDataFrame {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .stDataFrame th, .stDataFrame td {
+            padding: 12px 15px;
+            text-align: left;
             border: 1px solid #ddd;
-            border-radius: 10px;
+            font-size: 16px;
+        }
+
+        .stDataFrame th {
+            background-color: #0073e6;
+            color: white;
+            font-weight: bold;
+        }
+
+        /* Alternating row colors */
+        .stDataFrame tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        .stDataFrame tr:nth-child(odd) {
+            background-color: #ffffff;
         }
 
         /* Buttons */
@@ -122,7 +145,7 @@ if tab == "Request":
 
     if refresh_button:
         st.write("Latest Submitted Data:")
-        st.dataframe(data)  # Display the data without the additional styling (removing color formatting)
+        st.dataframe(data)  # Display the data with the added styling
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -180,6 +203,6 @@ if tab == "Ticket Mistakes":
 
     if refresh_mistake_button:
         st.write("Mistakes Table:")
-        st.dataframe(data)  # Display the mistakes table
+        st.dataframe(data)  # Display the mistakes table with the added styling
 
     st.markdown("<hr>", unsafe_allow_html=True)
