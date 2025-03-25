@@ -7,6 +7,7 @@ import os
 
 # Initialize database with error handling
 def init_db():
+    conn = None
     try:
         # Create the database directory if it doesn't exist
         os.makedirs("data", exist_ok=True)
@@ -194,7 +195,7 @@ else:
                         value=bool(completed),
                         key=f"check_{req_id}",
                         on_change=update_request_status,
-                        args=(req_id, not completed)
+                        args=(req_id, not completed))
                 with cols[1]:
                     st.markdown(f"""
                     **ID:** {req_id} | **Agent:** {agent} | **Type:** {req_type}  
