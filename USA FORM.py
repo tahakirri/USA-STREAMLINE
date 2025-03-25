@@ -222,7 +222,7 @@ def show_notifications():
                 notifs = pd.read_sql(
                     '''SELECT message, created_at FROM notifications 
                     WHERE recipient = ? ORDER BY created_at DESC LIMIT 10''',
-                    get_db_connection(),
+                    con=get_db_connection(),
                     params=(st.session_state.user,)
                 
                 for _, row in notifs.iterrows():
@@ -271,7 +271,7 @@ if section == "📋 Request":
             st.metric("Completed", request_data['completed'].sum())
         with col3:
             st.metric("Completion Rate", 
-                     f"{(request_data['completed'].sum()/len(request_data)*100):.1f}%")
+                     f"{(request_data['completed'].sum()/len(request_data)*100:.1f}%")
     
     # Request Form
     with st.form("request_form"):
