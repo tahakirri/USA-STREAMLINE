@@ -64,9 +64,9 @@ if section == "Request":
     with col2:
         comment_input = st.text_area("Comment", height=150, key="comment")
     
-    # Buttons for submission and refresh with icons
-    submit_button = st.button("Submit Data", icon="check_circle")
-    refresh_button = st.button("Refresh Data", icon="refresh")
+    # Buttons for submission and refresh with emojis
+    submit_button = st.button("Submit Data ✅")
+    refresh_button = st.button("Refresh Data 🔄")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -100,7 +100,7 @@ if section == "HOLD":
         image = Image.open(uploaded_image)
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    if st.button("CHECK HOLD", icon="search"):
+    if st.button("CHECK HOLD 🔍"):
         if uploaded_image:
             st.image(image, caption="Latest Uploaded Image", use_column_width=True)
         else:
@@ -122,9 +122,9 @@ if section == "Ticket Mistakes":
     with col2:
         error_input = st.text_area("Error", height=150, key="error")
     
-    # Buttons for submission and refresh with icons
-    submit_mistake_button = st.button("Submit Mistake", icon="check_circle")
-    refresh_mistake_button = st.button("Refresh Mistakes", icon="refresh")
+    # Buttons for submission and refresh with emojis
+    submit_mistake_button = st.button("Submit Mistake ✅")
+    refresh_mistake_button = st.button("Refresh Mistakes 🔄")
     
     if submit_mistake_button:
         # Ensure fields are filled out before submission
