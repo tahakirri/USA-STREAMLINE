@@ -36,12 +36,6 @@ def submit_data(agent_name, type_, id_, comment):
     data = pd.concat([data, new_row], ignore_index=True)
     data.to_csv(DATA_FILE, index=False)
 
-# Function to update the completed status
-def update_completion(index, completed_status):
-    global data
-    data.at[index, "Completed"] = completed_status
-    data.to_csv(DATA_FILE, index=False)
-
 # Function to submit ticket mistakes data
 def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     global ticket_mistakes
@@ -114,28 +108,8 @@ if tab == "Request":
     # Refresh Button
     if st.button("Refresh Data"):
         st.write("Data Table:")
-        for index, row in data.iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 3, 2, 1])
-            col1.write(row["Agent Name"])
-            col2.write(row["TYPE"])
-            col3.write(row["ID"])
-            col4.write(row["COMMENT"])
-            col5.write(row["Timestamp"])
-            
-            # Use session state to manage the checkbox state
-            checkbox_key = f"checkbox_{index}"
-            
-            # Initialize the checkbox value in session_state if it doesn't exist
-            if checkbox_key not in st.session_state:
-                st.session_state[checkbox_key] = row["Completed"]
-            
-            # Display checkbox and handle its state
-            completed = col6.checkbox("Done", value=st.session_state[checkbox_key], key=checkbox_key)
-            
-            # Update the status when the checkbox is clicked
-            if completed != st.session_state[checkbox_key]:
-                st.session_state[checkbox_key] = completed
-                update_completion(index, completed)
+        # Show data as a table
+        st.dataframe(data)  # Display the entire data in a table format
 
 # HOLD Tab
 if tab == "HOLD":
@@ -172,4 +146,3 @@ if tab == "Ticket Mistakes":
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
         st.write(refresh_ticket_mistakes())
-
