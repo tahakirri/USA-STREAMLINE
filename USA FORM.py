@@ -129,6 +129,7 @@ if tab == "Request":
             if checkbox_key not in st.session_state:
                 st.session_state[checkbox_key] = row["Completed"]
             
+            # Display checkbox and handle its state
             completed = col6.checkbox("Done", value=st.session_state[checkbox_key], key=checkbox_key)
             
             # Update the status when the checkbox is clicked
@@ -171,3 +172,4 @@ if tab == "Ticket Mistakes":
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
         st.write(refresh_ticket_mistakes())
+
