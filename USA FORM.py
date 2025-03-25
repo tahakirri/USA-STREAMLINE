@@ -54,6 +54,7 @@ def hash_password(password):
 
 # Authenticate user with error handling
 def authenticate(username, password):
+    conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
@@ -72,6 +73,7 @@ def authenticate(username, password):
 
 # Insert new request with error handling
 def add_request(agent_name, request_type, identifier, comment):
+    conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
@@ -88,6 +90,7 @@ def add_request(agent_name, request_type, identifier, comment):
 
 # Fetch requests with error handling
 def get_requests():
+    conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
@@ -105,6 +108,7 @@ def get_requests():
 
 # Update request status with error handling
 def update_request_status(request_id, completed):
+    conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
@@ -184,7 +188,7 @@ else:
                 cols = st.columns([0.1, 0.9])
                 with cols[0]:
                     done = st.checkbox(
-                        "Done", 
+                        "Done",
                         value=bool(completed),
                         key=f"check_{req_id}",
                         on_change=update_request_status,
@@ -224,6 +228,7 @@ else:
         st.subheader("Admin Panel")
         
         if st.button("Clear All Requests"):
+            conn = None
             try:
                 conn = sqlite3.connect("data/requests.db")
                 cursor = conn.cursor()
