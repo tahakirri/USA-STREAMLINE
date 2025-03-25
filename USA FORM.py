@@ -1,8 +1,16 @@
-import streamlit as st
+import os
 import pandas as pd
 from datetime import datetime
-import os
 from PIL import Image
+
+import streamlit as st
+
+# Page config MUST be the first Streamlit command
+st.set_page_config(
+    page_title="USA Collab", 
+    layout="wide", 
+    page_icon=":clipboard:"
+)  
 
 # Custom CSS for enhanced styling
 def set_custom_styling():
@@ -105,13 +113,6 @@ def load_mistake_data():
 def main():
     # Set custom styling
     set_custom_styling()
-
-    # Streamlit interface settings
-    st.set_page_config(
-        page_title="USA Collab", 
-        layout="wide", 
-        page_icon=":clipboard:"
-    )  
 
     # Custom title with icon
     st.markdown(
