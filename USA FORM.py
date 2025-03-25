@@ -60,6 +60,8 @@ def refresh_ticket_mistakes():
     return ticket_mistakes
 
 # Streamlit interface
+st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and layout
+
 st.title("USA Collab")
 
 # Tabs
@@ -68,20 +70,36 @@ tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"])
 # Request Tab
 if tab == "Request":
     st.header("Request Section")
-    agent_name_input = st.text_input("Agent Name")
-    type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
-    id_input = st.text_input("ID")
-    comment_input = st.text_area("Comment")
     
-    if st.button("Submit Data"):
-        data = submit_data(agent_name_input, type_input, id_input, comment_input)
-        st.write("Data Submitted!")
+    # Use columns to structure inputs
+    col1, col2 = st.columns([3, 2])  # Wider first column for inputs
+    
+    with col1:
+        agent_name_input = st.text_input("Agent Name")
+        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
+        id_input = st.text_input("ID")
+    
+    with col2:
+        comment_input = st.text_area("Comment", height=150)
+    
+    # Buttons for submission and refresh
+    submit_button = st.button("Submit Data")
+    refresh_button = st.button("Refresh Data")
+    
+    if submit_button:
+        # Ensure fields are filled out before submission
+        if not agent_name_input or not id_input or not comment_input:
+            st.error("Please fill out all fields.")
+        else:
+            data = submit_data(agent_name_input, type_input, id_input, comment_input)
+            st.success("Data Submitted!")
+    
+    if refresh_button:
         st.write("Latest Submitted Data:")
-        st.write(data.tail(1))
+        st.write(data)  # Show the data table
     
-    if st.button("Refresh Data"):
-        st.write("Data Table:")
-        st.write(data)  # Display the data as it is
+    # Additional space for better layout
+    st.markdown("---")
 
 # HOLD Tab
 if tab == "HOLD":
@@ -97,21 +115,40 @@ if tab == "HOLD":
             st.image(image, caption="Latest Uploaded Image", use_column_width=True)
         else:
             st.write("No image uploaded.")
+    
+    # Additional space for better layout
+    st.markdown("---")
 
 # Ticket Mistakes Tab
 if tab == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
-    team_leader_input = st.text_input("Team Leader Name")
-    agent_name_mistake_input = st.text_input("Agent Name")
-    ticket_id_input = st.text_input("Ticket ID")
-    error_input = st.text_area("Error")
     
-    if st.button("Submit Mistake"):
-        ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
-        st.write("Mistake Submitted!")
-        st.write("Latest Submitted Mistake:")
-        st.write(ticket_mistakes.tail(1))
+    # Use columns for input fields
+    col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
-    if st.button("Refresh Mistakes"):
+    with col1:
+        team_leader_input = st.text_input("Team Leader Name")
+        agent_name_mistake_input = st.text_input("Agent Name")
+        ticket_id_input = st.text_input("Ticket ID")
+    
+    with col2:
+        error_input = st.text_area("Error", height=150)
+    
+    # Buttons for submission and refresh
+    submit_button = st.button("Submit Mistake")
+    refresh_button = st.button("Refresh Mistakes")
+    
+    if submit_button:
+        # Ensure fields are filled out before submission
+        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
+            st.error("Please fill out all fields.")
+        else:
+            ticket_mistakes = submit_ticket_mistake(team_leader_input, agent_name_mistake_input, ticket_id_input, error_input)
+            st.success("Mistake Submitted!")
+    
+    if refresh_button:
         st.write("Mistakes Table:")
-        st.write(refresh_ticket_mistakes())
+        st.write(ticket_mistakes)  # Show the ticket mistakes table
+    
+    # Additional space for better layout
+    st.markdown("---")
