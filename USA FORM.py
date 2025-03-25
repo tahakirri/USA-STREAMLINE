@@ -75,27 +75,34 @@ if section == "Request":
         # Create a list to store updated completed status
         updated_completed = []
         
-        # Create columns for checkbox and data
+        # Create a list to hold display rows
+        display_rows = []
+        
         for index, row in display_data.iterrows():
-            col1, col2 = st.columns([1, 10])
-            
-            with col1:
-                # Checkbox with unique key
-                completed = st.checkbox(
-                    "✔", 
-                    value=row["Completed"], 
-                    key=f"completed_{index}"
-                )
-                updated_completed.append(completed)
-            
-            with col2:
-                # Display row data
-                st.write(f"**Agent Name:** {row['Agent Name']}")
-                st.write(f"**Type:** {row['TYPE']}")
-                st.write(f"**ID:** {row['ID']}")
-                st.write(f"**Comment:** {row['COMMENT']}")
-                st.write(f"**Timestamp:** {row['Timestamp']}")
-                st.markdown("---")
+            # Create checkbox
+            completed = st.checkbox(
+                "✔", 
+                value=row["Completed"], 
+                key=f"completed_{index}"
+            )
+            updated_completed.append(completed)
+            display_rows.append({
+                "Completed": completed,
+                "Agent Name": row["Agent Name"],
+                "Type": row["TYPE"],
+                "ID": row["ID"],
+                "Comment": row["COMMENT"],
+                "Timestamp": row["Timestamp"]
+            })
+        
+        # Create display DataFrame
+        display_df = pd.DataFrame(display_rows)
+        
+        # Reorder columns
+        display_df = display_df[["Completed", "Agent Name", "Type", "ID", "Comment", "Timestamp"]]
+        
+        # Display as dataframe
+        st.dataframe(display_df, use_container_width=True)
         
         # Update the Completed column in the original dataframe
         request_data.loc[:, "Completed"] = updated_completed
@@ -105,5 +112,57 @@ if section == "Request":
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-# Rest of the code remains the same (HOLD and Ticket Mistakes sections)
-# ... [previous HOLD and Ticket Mistakes sections remain unchanged]
+# HOLD Tab
+if section == "HOLD":
+    st.header("HOLD Section")
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    
+    if uploaded_image:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
+    if st.button("CHECK HOLD"):
+        if uploaded_image:
+            st.image(image, caption="Latest Uploaded Image", use_column_width=True)
+        else:
+            st.write("No image uploaded.")
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+# Ticket Mistakes Tab
+if section == "Ticket Mistakes":
+    st.header("Ticket Mistakes Section")
+
+    col1, col2 = st.columns([3, 2])  
+    
+    with col1:
+        team_leader_input = st.text_input("Team Leader Name", key="team_leader")
+        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
+        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
+    
+    with col2:
+        error_input = st.text_area("Error", height=150, key="error")
+    
+    submit_mistake_button = st.button("Submit Mistake")
+    refresh_mistake_button = st.button("Refresh Mistakes")
+    
+    if submit_mistake_button:
+        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
+            st.error("Please fill out all fields.")
+        else:
+            new_mistake = {
+                "Team Leader Name": team_leader_input,
+                "Agent Name": agent_name_mistake_input,
+                "Ticket ID": ticket_id_input,
+                "Error": error_input,
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            new_row = pd.DataFrame([new_mistake])
+            mistake_data = pd.concat([mistake_data, new_row], ignore_index=True)
+            mistake_data.to_csv(MISTAKE_FILE, index=False)
+            st.success("Mistake Submitted!")
+
+    if refresh_mistake_button or not mistake_data.empty:
+        st.write("Mistakes Table:")
+        st.dataframe(mistake_data, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
