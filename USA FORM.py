@@ -105,4 +105,3 @@ if tab == "Ticket Mistakes":
     if st.button("Refresh Mistakes"):
         st.write("Mistakes Table:")
         st.write(refresh_ticket_mistakes())
-
