@@ -97,16 +97,16 @@ st.markdown("""
 if section == "Request":
     st.header("Request Section")
     
-    # Layout with columns for better alignment
+    # Layout with columns for better alignment (make all input fields the same height)
     col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
-        agent_name_input = st.text_input("Agent Name", key="agent_name")
+        agent_name_input = st.text_input("Agent Name", key="agent_name", max_chars=50)
         type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
-        id_input = st.text_input("ID", key="id")
+        id_input = st.text_input("ID", key="id", max_chars=50)
     
     with col2:
-        comment_input = st.text_area("Comment", height=150, key="comment")
+        comment_input = st.text_area("Comment", height=250, key="comment")  # Match the height with other inputs
     
     # Buttons for submission and refresh with emojis
     submit_button = st.button("Submit Data ✅")
@@ -155,16 +155,16 @@ if section == "HOLD":
 if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
     
-    # Layout with columns for better alignment
+    # Layout with columns for better alignment (make all input fields the same height)
     col1, col2 = st.columns([3, 2])  # Wider first column for inputs
     
     with col1:
-        team_leader_input = st.text_input("Team Leader Name", key="team_leader")
-        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake")
-        ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
+        team_leader_input = st.text_input("Team Leader Name", key="team_leader", max_chars=50)
+        agent_name_mistake_input = st.text_input("Agent Name", key="agent_name_mistake", max_chars=50)
+        ticket_id_input = st.text_input("Ticket ID", key="ticket_id", max_chars=50)
     
     with col2:
-        error_input = st.text_area("Error", height=150, key="error")
+        error_input = st.text_area("Error", height=250, key="error")  # Match the height with other inputs
     
     # Buttons for submission and refresh with emojis
     submit_mistake_button = st.button("Submit Mistake ✅")
