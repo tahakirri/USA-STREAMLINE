@@ -29,6 +29,23 @@ def init_db():
         if conn:
             conn.close()
 
+def get_unread_count(username):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) FROM private_messages 
+            WHERE receiver=? AND is_read=0
+        """, (username,))
+        return cursor.fetchone()[0]
+    except sqlite3.Error as e:
+        st.error(f"Failed to get unread count: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
 # [All other database functions...]
 
 # --------------------------
@@ -83,32 +100,9 @@ else:
         
         section = st.radio("Navigation", nav_options)
     
-    # Request Section
-    if section == "📋 Request":
-        # [Request section code...]
-        pass
-    
-    # HOLD Section
-    elif section == "🖼️ HOLD":
-        # [HOLD section code...]
-        pass
-    
-    # Ticket Mistakes Section
-    elif section == "❌ Ticket Mistakes":
-        # [Ticket mistakes section code...]
-        pass
-    
-    # Conversation Room Section
-    elif section.startswith("💬 Conversation Room"):
-        # [Modern messaging UI code...]
-        pass
-    
-    # Admin Panel Section
-    elif section == "⚙ Admin Panel" and st.session_state.role == "admin":
-        # [Admin panel code...]
-        pass
+    # [Rest of your UI code...]
 
-# Check for new messages and show notifications
+# Check for new messages
 if st.session_state.get("authenticated", False):
     unread_count = get_unread_count(st.session_state.username)
     if unread_count > st.session_state.get("last_unread_count", 0):
