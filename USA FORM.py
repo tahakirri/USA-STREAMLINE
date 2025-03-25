@@ -2,15 +2,65 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
-import io
+import sqlite3
+from contextlib import closing
 from PIL import Image
 
-# Ensure a directory exists for storing uploaded images
+# --- Database Setup ---
+DB_NAME = 'collab_app.db'
 UPLOAD_DIRECTORY = 'uploaded_images'
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 LATEST_IMAGE_PATH = os.path.join(UPLOAD_DIRECTORY, 'latest_hold_image.jpg')
 
-# Custom CSS for dark mode and enhanced styling
+def init_db():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        cursor = conn.cursor()
+        # Requests table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                completed BOOLEAN DEFAULT 0,
+                agent_name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                identifier TEXT NOT NULL,
+                comment TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        ''')
+        # Mistakes table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mistakes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_leader TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                error TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        ''')
+        conn.commit()
+
+def get_db_connection():
+    return sqlite3.connect(DB_NAME)
+
+def execute_query(query, params=(), fetch=False):
+    with closing(get_db_connection()) as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        if fetch:
+            return cursor.fetchall()
+        conn.commit()
+
+def get_requests_df():
+    return pd.read_sql('SELECT * FROM requests', get_db_connection())
+
+def get_mistakes_df():
+    return pd.read_sql('SELECT * FROM mistakes', get_db_connection())
+
+# Initialize database
+init_db()
+
+# --- UI Configuration ---
 st.set_page_config(
     page_title="USA Collab", 
     page_icon="✉️", 
@@ -18,30 +68,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Define separate CSV files for each section
-REQUEST_FILE = 'request_data.csv'
-MISTAKE_FILE = 'mistake_data.csv'
-
-# Ensure files exist
-for file in [REQUEST_FILE, MISTAKE_FILE]:
-    if not os.path.exists(file):
-        pd.DataFrame().to_csv(file, index=False)
-
-# Load request data with Completed column
-try:
-    request_data = pd.read_csv(REQUEST_FILE)
-    if "Completed" not in request_data.columns:
-        request_data["Completed"] = False
-except pd.errors.EmptyDataError:
-    request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
-
-# Load mistake data
-try:
-    mistake_data = pd.read_csv(MISTAKE_FILE)
-except pd.errors.EmptyDataError:
-    mistake_data = pd.DataFrame(columns=["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"])
-
-# Sidebar for navigation with icons
+# --- Theme Management ---
 with st.sidebar:
     st.markdown("### 🧭 Navigation")
     section = st.radio("Choose Section", [
@@ -50,14 +77,13 @@ with st.sidebar:
         "❌ Ticket Mistakes"
     ])
     
-    # Add theme toggle in the sidebar
-    dark_mode = st.toggle("🌙 Dark Mode / ☀️ Light Mode", value=True)
+    # Theme toggle
+    dark_mode = st.toggle("🌙 Dark Mode", value=True)
 
-# Define CSS based on theme selection
+# Theme CSS
 if dark_mode:
-    custom_css = """
+    theme_css = """
     <style>
-        /* Dark Mode Theme */
         :root {
             --primary-text: #ffffff;
             --secondary-text: #f0f0f0;
@@ -76,9 +102,8 @@ if dark_mode:
     </style>
     """
 else:
-    custom_css = """
+    theme_css = """
     <style>
-        /* Light Mode Theme */
         :root {
             --primary-text: #000000;
             --secondary-text: #333333;
@@ -94,39 +119,21 @@ else:
             --table-bg: #ffffff;
             --table-text: #000000;
         }
-        
-        /* Fix for text color in light mode */
-        p, div, span, label {
-            color: var(--primary-text) !important;
-        }
-        
-        /* Fix for selectbox text color */
-        .stSelectbox label {
-            color: var(--primary-text) !important;
-        }
     </style>
     """
 
-# Common CSS styles
 common_css = """
 <style>
-    /* Common Styles */
     .stApp {
         background-color: var(--background);
         color: var(--primary-text);
     }
-    
-    /* Custom Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: var(--sidebar);
     }
-    
-    /* Header Styling */
     h1, h2, h3, h4 {
         color: var(--header);
     }
-    
-    /* Input and Select Box Styling */
     .stTextInput > div > div > input, 
     .stSelectbox > div > div > div > select,
     .stTextArea > div > div > textarea {
@@ -134,52 +141,28 @@ common_css = """
         color: var(--input-text);
         border: 1px solid var(--input-border);
     }
-    
-    /* Fix for selectbox options */
-    .stSelectbox div[data-baseweb="select"] > div {
-        background-color: var(--input-bg);
-        color: var(--input-text);
-    }
-    
-    /* Data Editor Styling */
     .dataframe {
         background-color: var(--table-bg);
         color: var(--table-text);
     }
-    
-    /* Button Styling */
     .stButton > button {
         background-color: var(--button-bg);
         color: var(--button-text);
         border: none;
-        transition: background-color 0.3s ease;
     }
-    
     .stButton > button:hover {
         background-color: var(--button-hover);
     }
-    
-    /* Fix for checkbox labels */
-    .stCheckbox label {
-        color: var(--primary-text) !important;
-    }
-    
-    /* Fix for radio button labels */
-    .stRadio label {
-        color: var(--primary-text) !important;
-    }
-    
-    /* Fix for text input labels */
+    .stCheckbox label, .stRadio label, 
     .stTextInput label, .stTextArea label {
         color: var(--primary-text) !important;
     }
 </style>
 """
 
-# Combine the custom CSS with common styles
-st.markdown(custom_css + common_css, unsafe_allow_html=True)
+st.markdown(theme_css + common_css, unsafe_allow_html=True)
 
-# Request Tab
+# --- Request Section ---
 if section == "📋 Request":
     st.header("📋 Request Section")
 
@@ -193,7 +176,6 @@ if section == "📋 Request":
     with col2:
         comment_input = st.text_area("💬 Comment", height=150, key="comment")  
     
-    # Side-by-side buttons
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     
     with btn_col1:
@@ -205,48 +187,33 @@ if section == "📋 Request":
     with btn_col3:
         clear_button = st.button("🗑️ Clear Data")
     
-    # Clear data confirmation
     if clear_button:
-        # Create a password input for confirmation
         clear_password = st.text_input("🔐 Enter password to clear data:", type="password", key="clear_password")
-        
-        if clear_password:
-            if clear_password == "wipe":
-                # Clear only request data
-                request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
-                request_data.to_csv(REQUEST_FILE, index=False)
-                st.success("✅ Request data has been cleared successfully!")
-            else:
-                st.error("❌ Incorrect password. Data was not cleared.")
+        if clear_password == "wipe":
+            execute_query("DELETE FROM requests")
+            st.success("✅ Request data has been cleared!")
+        elif clear_password:
+            st.error("❌ Incorrect password")
     
     if submit_button:
         if not agent_name_input or not id_input or not comment_input:
             st.error("❗ Please fill out all fields.")
         else:
-            new_data = {
-                "Completed": False,
-                "Agent Name": agent_name_input,
-                "TYPE": type_input,
-                "ID": id_input,
-                "COMMENT": comment_input,
-                "Timestamp": datetime.now().strftime("%H:%M:%S")
-            }
-            new_row = pd.DataFrame([new_data])
-            request_data = pd.concat([request_data, new_row], ignore_index=True)
-            request_data.to_csv(REQUEST_FILE, index=False)
+            execute_query('''
+                INSERT INTO requests (agent_name, type, identifier, comment, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (agent_name_input, type_input, id_input, comment_input, 
+                  datetime.now().strftime("%H:%M:%S")))
             st.success("✅ Data Submitted!")
 
+    request_data = get_requests_df()
     if not request_data.empty:
         st.write("### 📋 Submitted Requests:")
-        
-        columns_order = ["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
-        
-        display_data = request_data[columns_order].copy()
-        
         edited_df = st.data_editor(
-            display_data, 
+            request_data,
             column_config={
-                "Completed": st.column_config.CheckboxColumn(
+                "id": None,
+                "completed": st.column_config.CheckboxColumn(
                     "✅ Completed",
                     help="Mark request as completed",
                     default=False
@@ -256,41 +223,33 @@ if section == "📋 Request":
             use_container_width=True
         )
         
-        request_data.loc[:, columns_order] = edited_df
-        request_data.to_csv(REQUEST_FILE, index=False)
+        # Update completed status
+        for _, row in edited_df.iterrows():
+            execute_query(
+                'UPDATE requests SET completed = ? WHERE id = ?',
+                (row['completed'], row['id'])
+            )
 
-# HOLD Tab
-if section == "🖼️ HOLD":
+# --- HOLD Section ---
+elif section == "🖼️ HOLD":
     st.header("🖼️ HOLD Section")
     uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
     
     if uploaded_image:
         try:
-            # Open the image
             image = Image.open(uploaded_image)
-            
-            # Convert image to RGB mode if it's not already
             if image.mode != 'RGB':
                 image = image.convert('RGB')
-            
-            # Ensure the directory exists
             os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
-            
-            # Save the image with explicit write permissions
             image.save(LATEST_IMAGE_PATH, quality=85)
-            
-            # Display the uploaded image
             st.image(image, caption="📸 Uploaded Image", use_container_width=True)
             st.success("✅ Image uploaded successfully!")
-        
         except Exception as e:
             st.error(f"❌ Error uploading image: {str(e)}")
 
     if st.button("🔍 CHECK HOLD"):
-        # Check if the latest image exists
         if os.path.exists(LATEST_IMAGE_PATH):
             try:
-                # Open and display the latest image
                 latest_image = Image.open(LATEST_IMAGE_PATH)
                 st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
             except Exception as e:
@@ -298,8 +257,8 @@ if section == "🖼️ HOLD":
         else:
             st.write("❌ No image uploaded.")
 
-# Ticket Mistakes Tab
-if section == "❌ Ticket Mistakes":
+# --- Mistakes Section ---
+elif section == "❌ Ticket Mistakes":
     st.header("❌ Ticket Mistakes Section")
 
     col1, col2 = st.columns([3, 2])  
@@ -312,7 +271,6 @@ if section == "❌ Ticket Mistakes":
     with col2:
         error_input = st.text_area("⚠️ Error", height=150, key="error")
     
-    # Side-by-side buttons for Ticket Mistakes
     btn_col1, btn_col2 = st.columns(2)
     
     with btn_col1:
@@ -325,18 +283,32 @@ if section == "❌ Ticket Mistakes":
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
             st.error("❗ Please fill out all fields.")
         else:
-            new_mistake = {
-                "Team Leader Name": team_leader_input,
-                "Agent Name": agent_name_mistake_input,
-                "Ticket ID": ticket_id_input,
-                "Error": error_input,
-                "Timestamp": datetime.now().strftime("%H:%M:%S")
-            }
-            new_row = pd.DataFrame([new_mistake])
-            mistake_data = pd.concat([mistake_data, new_row], ignore_index=True)
-            mistake_data.to_csv(MISTAKE_FILE, index=False)
+            execute_query('''
+                INSERT INTO mistakes (team_leader, agent_name, ticket_id, error, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (team_leader_input, agent_name_mistake_input, ticket_id_input, 
+                  error_input, datetime.now().strftime("%H:%M:%S")))
             st.success("✅ Mistake Submitted!")
 
-    if refresh_mistake_button or not mistake_data.empty:
+    if refresh_mistake_button:
+        st.rerun()
+
+    mistake_data = get_mistakes_df()
+    if not mistake_data.empty:
         st.write("❌ Mistakes Table:")
         st.dataframe(mistake_data, use_container_width=True)
+
+# --- Migration Utility (One-time use) ---
+with st.sidebar:
+    if st.checkbox("Show Developer Options"):
+        if st.button("⚠️ Initialize Database"):
+            init_db()
+            st.success("Database initialized!")
+        
+        if st.button("🔄 Export Requests to CSV"):
+            df = get_requests_df()
+            st.download_button(
+                "Download Requests",
+                df.to_csv(index=False),
+                "requests_export.csv"
+            )
