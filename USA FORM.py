@@ -85,7 +85,11 @@ if not st.session_state.authenticated:
             st.error("Invalid credentials")
 else:
     st.success(f"Logged in as {st.session_state.username} ({st.session_state.role})")
-    if st.session_state.role == "agent":
+    
+    # Sidebar Navigation
+    section = st.sidebar.radio("Navigation", ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes", "⚙ Admin Panel" if st.session_state.role == "admin" else ""])
+    
+    if section == "📋 Request":
         st.subheader("Submit a Request")
         request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
         identifier = st.text_input("Identifier")
@@ -93,13 +97,29 @@ else:
         if st.button("Submit Request"):
             add_request(st.session_state.username, request_type, identifier, comment)
             st.success("Request submitted!")
+        
+        st.subheader("Requests")
+        requests = get_requests()
+        for req in requests:
+            st.write(req)
     
-    st.subheader("Requests")
-    requests = get_requests()
-    for req in requests:
-        st.write(req)
+    elif section == "🖼️ HOLD":
+        st.subheader("HOLD Section")
+        uploaded_image = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
+        if uploaded_image:
+            st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+            st.success("Image uploaded successfully!")
     
-    if st.session_state.role == "admin":
+    elif section == "❌ Ticket Mistakes":
+        st.subheader("Ticket Mistakes Section")
+        team_leader = st.text_input("Team Leader Name")
+        agent_name = st.text_input("Agent Name")
+        ticket_id = st.text_input("Ticket ID")
+        error_description = st.text_area("Error Description")
+        if st.button("Submit Mistake"):
+            st.success("Mistake submitted!")
+    
+    elif section == "⚙ Admin Panel" and st.session_state.role == "admin":
         st.subheader("Admin Panel")
         if st.button("Clear All Requests"):
             conn = sqlite3.connect("requests.db")
