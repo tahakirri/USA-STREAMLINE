@@ -18,53 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Define custom CSS for dark mode and enhanced styling
-st.markdown("""
-<style>
-    /* Dark Mode Theme */
-    .stApp {
-        background-color: #0e1117;
-        color: #ffffff;
-    }
-    
-    /* Custom Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #1e2129;
-    }
-    
-    /* Header Styling */
-    h1, h2, h3, h4 {
-        color: #4db8ff;
-    }
-    
-    /* Input and Select Box Styling */
-    .stTextInput > div > div > input, 
-    .stSelectbox > div > div > div > select {
-        background-color: #2c2f36;
-        color: #ffffff;
-        border: 1px solid #4a4e57;
-    }
-    
-    /* Data Editor Styling */
-    .dataframe {
-        background-color: #1e2129;
-        color: #ffffff;
-    }
-    
-    /* Button Styling */
-    .stButton > button {
-        background-color: #4db8ff;
-        color: #ffffff;
-        border: none;
-        transition: background-color 0.3s ease;
-    }
-    
-    .stButton > button:hover {
-        background-color: #3aa0ff;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # Define separate CSV files for each section
 REQUEST_FILE = 'request_data.csv'
 MISTAKE_FILE = 'mistake_data.csv'
@@ -96,6 +49,105 @@ with st.sidebar:
         "🖼️ HOLD", 
         "❌ Ticket Mistakes"
     ])
+    
+    # Add theme toggle in the sidebar
+    dark_mode = st.toggle("🌙 Dark Mode", value=True)
+
+# Define CSS based on theme selection
+if dark_mode:
+    custom_css = """
+    <style>
+        /* Dark Mode Theme */
+        .stApp {
+            background-color: #0e1117;
+            color: #ffffff;
+        }
+        
+        /* Custom Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #1e2129;
+        }
+        
+        /* Header Styling */
+        h1, h2, h3, h4 {
+            color: #4db8ff;
+        }
+        
+        /* Input and Select Box Styling */
+        .stTextInput > div > div > input, 
+        .stSelectbox > div > div > div > select {
+            background-color: #2c2f36;
+            color: #ffffff;
+            border: 1px solid #4a4e57;
+        }
+        
+        /* Data Editor Styling */
+        .dataframe {
+            background-color: #1e2129;
+            color: #ffffff;
+        }
+        
+        /* Button Styling */
+        .stButton > button {
+            background-color: #4db8ff;
+            color: #ffffff;
+            border: none;
+            transition: background-color 0.3s ease;
+        }
+        
+        .stButton > button:hover {
+            background-color: #3aa0ff;
+        }
+    </style>
+    """
+else:
+    custom_css = """
+    <style>
+        /* Light Mode Theme */
+        .stApp {
+            background-color: #ffffff;
+            color: #000000;
+        }
+        
+        /* Custom Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #f0f2f6;
+        }
+        
+        /* Header Styling */
+        h1, h2, h3, h4 {
+            color: #0068c9;
+        }
+        
+        /* Input and Select Box Styling */
+        .stTextInput > div > div > input, 
+        .stSelectbox > div > div > div > select {
+            background-color: #ffffff;
+            color: #000000;
+            border: 1px solid #d1d5db;
+        }
+        
+        /* Data Editor Styling */
+        .dataframe {
+            background-color: #ffffff;
+            color: #000000;
+        }
+        
+        /* Button Styling */
+        .stButton > button {
+            background-color: #0068c9;
+            color: #ffffff;
+            border: none;
+            transition: background-color 0.3s ease;
+        }
+        
+        .stButton > button:hover {
+            background-color: #0055a5;
+        }
+    </style>
+    """
+
+st.markdown(custom_css, unsafe_allow_html=True)
 
 # Request Tab
 if section == "📋 Request":
