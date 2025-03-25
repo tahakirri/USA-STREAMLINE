@@ -1,374 +1,238 @@
-import streamlit as st
-import sqlite3
-import hashlib
-from datetime import datetime
-import pandas as pd
-import os
-import re
-from streamlit.components.v1 import html
-
-# --------------------------
-# Database Functions
-# --------------------------
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def init_db():
-    conn = None
-    try:
-        os.makedirs("data", exist_ok=True)
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        
-        # Users table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin'))
-            )
-        """)
-        
-        # Requests table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                request_type TEXT,
-                identifier TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                completed INTEGER DEFAULT 0
-            )
-        """)
-        
-        # Mistakes table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS mistakes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_leader TEXT,
-                agent_name TEXT,
-                ticket_id TEXT,
-                error_description TEXT,
-                timestamp TEXT
-            )
-        """)
-        
-        # Group messages table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS group_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT
-            )
-        """)
-        
-        # Private messages table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS private_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                receiver TEXT,
-                message TEXT,
-                timestamp TEXT,
-                is_read INTEGER DEFAULT 0
-            )
-        """)
-        
-        # Default admin account
-        cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
-            VALUES (?, ?, ?)
-        """, ("admin", hash_password("admin123"), "admin"))
-        
-        conn.commit()
-    except sqlite3.Error as e:
-        st.error(f"Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-def authenticate(username, password):
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT role FROM users 
-            WHERE username=? AND password=?
-        """, (username, hash_password(password)))
-        user = cursor.fetchone()
-        return user[0] if user else None
-    except sqlite3.Error as e:
-        st.error(f"Authentication error: {e}")
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-def reset_user_password(user_id, new_password):
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE users 
-            SET password=? 
-            WHERE id=?
-        """, (hash_password(new_password), user_id))
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to reset password: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-# ... [Rest of the previous database functions remain the same]
-
-def add_request(agent_name, request_type, identifier, comment):
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
-            VALUES (?, ?, ?, ?, ?)
-        """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-    except sqlite3.Error as e:
-        st.error(f"Failed to add request: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-# Main Streamlit App Configuration
-st.set_page_config(
-    page_title="Request Management System", 
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
-
-# Custom Tailwind-inspired CSS
-st.markdown("""
-<style>
-    /* Base Styles */
-    .stApp {
-        background-color: #f4f4f5;
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Card Styles */
-    .custom-card {
-        background-color: white;
-        border-radius: 0.75rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* Button Styles */
-    .custom-button {
-        background-color: #3b82f6;
-        color: white;
-        border-radius: 0.5rem;
-        padding: 0.5rem 1rem;
-        transition: background-color 0.3s ease;
-    }
-    
-    .custom-button:hover {
-        background-color: #2563eb;
-    }
-    
-    /* Input Styles */
-    .stTextInput > div > div > input, 
-    .stTextArea > div > div > textarea {
-        border-radius: 0.5rem;
-        border: 1px solid #e5e7eb;
-        padding: 0.5rem;
-    }
-    
-    /* Message Styles */
-    .message-container {
-        max-height: 400px;
-        overflow-y: auto;
-        background-color: #f9fafb;
-        border-radius: 0.75rem;
-        padding: 1rem;
-    }
-    
-    .sent-message {
-        background-color: #3b82f6;
-        color: white;
-        align-self: flex-end;
-        border-radius: 0.75rem;
-        padding: 0.75rem;
-        max-width: 70%;
-        margin-bottom: 0.5rem;
-    }
-    
-    .received-message {
-        background-color: #e5e7eb;
-        color: black;
-        align-self: flex-start;
-        border-radius: 0.75rem;
-        padding: 0.75rem;
-        max-width: 70%;
-        margin-bottom: 0.5rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Initialize session state
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.role = None
-    st.session_state.username = None
-
-# Initialize database
-init_db()
-
-def login_page():
-    st.title("🔐 Request Management System")
-    st.subheader("Login to Continue")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
-    
-    with col2:
-        st.write("") # Spacer
-        st.write("") # Spacer
-        
-        login_col1, login_col2 = st.columns([1, 1])
-        
-        with login_col1:
-            if st.button("Login", use_container_width=True, type="primary"):
-                if username and password:
-                    role = authenticate(username, password)
-                    if role:
-                        st.session_state.authenticated = True
-                        st.session_state.role = role
-                        st.session_state.username = username
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials")
-                else:
-                    st.warning("Please enter both username and password")
-        
-        with login_col2:
-            st.write("Forgot password? Contact admin.")
-
-def main_dashboard():
-    st.sidebar.title(f"👋 Welcome, {st.session_state.username}")
-    
-    # Sidebar Navigation
-    menu_options = [
-        "📋 Requests", 
-        "💬 Messaging", 
-        "🚨 Issue Tracking", 
-        "🔍 Search"
-    ]
-    
-    if st.session_state.role == "admin":
-        menu_options.append("⚙️ Admin Tools")
-    
-    selected_menu = st.sidebar.radio("Navigation", menu_options)
-    
-    # Main Content Area
-    if selected_menu == "📋 Requests":
-        requests_section()
-    elif selected_menu == "💬 Messaging":
-        messaging_section()
-    elif selected_menu == "🚨 Issue Tracking":
-        issue_tracking_section()
-    elif selected_menu == "🔍 Search":
-        search_section()
-    elif selected_menu == "⚙️ Admin Tools" and st.session_state.role == "admin":
-        admin_tools_section()
-
-def requests_section():
-    st.header("📋 Request Management")
-    
-    # Request Submission
-    with st.expander("Submit New Request"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            request_type = st.selectbox("Request Type", ["Email", "Phone", "Ticket"])
-        
-        with col2:
-            identifier = st.text_input("Identifier")
-        
-        comment = st.text_area("Additional Comments")
-        
-        if st.button("Submit Request"):
-            if identifier and comment:
-                add_request(st.session_state.username, request_type, identifier, comment)
-                st.success("Request submitted successfully!")
-            else:
-                st.warning("Please fill all required fields")
-    
-    # Request List
-    st.subheader("Recent Requests")
-    requests = get_requests()
-    
-    if requests:
-        for req in requests:
-            with st.container():
-                st.markdown(f"""
-                **Request ID:** {req[0]}  
-                **Agent:** {req[1]} | **Type:** {req[2]}  
-                **Identifier:** {req[3]}  
-                **Comments:** {req[4]}  
-                **Timestamp:** {req[5]}
-                """)
-                st.checkbox("Completed", key=f"request_{req[0]}")
-                st.divider()
-    else:
-        st.info("No requests found.")
+# ... [Previous imports and database functions remain the same]
 
 def messaging_section():
     st.header("💬 Messaging Center")
-    # Placeholder for messaging functionality
-    st.write("Messaging section coming soon!")
+    
+    # Tabs for Group and Private Messaging
+    tab1, tab2 = st.tabs(["Group Chat", "Private Messages"])
+    
+    with tab1:
+        st.subheader("Group Chat")
+        
+        # Display Group Messages
+        messages = get_group_messages()
+        for msg in reversed(messages):
+            msg_id, sender, message, timestamp, mentions = msg
+            st.markdown(f"**{sender}** at {timestamp}")
+            st.write(message)
+            st.divider()
+        
+        # Send Group Message
+        with st.form("group_message_form", clear_on_submit=True):
+            new_message = st.text_area("Type your message...")
+            if st.form_submit_button("Send"):
+                if new_message.strip():
+                    mentions = extract_mentions(new_message)
+                    valid_mentions = []
+                    
+                    all_users = [user[1] for user in get_all_users()]
+                    for mention in mentions:
+                        if mention in all_users:
+                            valid_mentions.append(mention)
+                        else:
+                            st.warning(f"User @{mention} not found")
+                    
+                    add_group_message(st.session_state.username, new_message, valid_mentions)
+                    st.success("Message sent!")
+    
+    with tab2:
+        st.subheader("Private Messages")
+        
+        # Select recipient based on user role
+        if st.session_state.role == "agent":
+            recipients = get_admins()
+        else:
+            recipients = get_all_users_except(st.session_state.username)
+        
+        selected_recipient = st.selectbox("Message to:", recipients)
+        
+        # Display Conversation History
+        conversation = get_conversation_history(st.session_state.username, selected_recipient)
+        for msg in conversation:
+            msg_id, sender, receiver, message, timestamp, is_read = msg
+            st.markdown(f"**{sender}** at {timestamp}")
+            st.write(message)
+            st.divider()
+        
+        # Send Private Message
+        with st.form("private_message_form", clear_on_submit=True):
+            private_message = st.text_area("Type your message...")
+            if st.form_submit_button("Send"):
+                if private_message.strip():
+                    add_private_message(st.session_state.username, selected_recipient, private_message)
+                    st.success("Message sent!")
 
 def issue_tracking_section():
     st.header("🚨 Issue Tracking")
-    # Placeholder for issue tracking functionality
-    st.write("Issue tracking section coming soon!")
+    
+    # Ticket Mistakes Submission
+    st.subheader("Report a Mistake")
+    with st.form("mistake_form", clear_on_submit=True):
+        team_leader = st.text_input("Team Leader Name")
+        agent_name = st.text_input("Agent Name")
+        ticket_id = st.text_input("Ticket ID")
+        error_description = st.text_area("Error Description")
+        
+        if st.form_submit_button("Submit Mistake"):
+            if team_leader and agent_name and ticket_id and error_description:
+                add_mistake(team_leader, agent_name, ticket_id, error_description)
+                st.success("Mistake submitted successfully!")
+            else:
+                st.warning("Please fill all fields")
+    
+    # Display Submitted Mistakes
+    st.subheader("Recorded Mistakes")
+    mistakes = get_mistakes()
+    
+    if mistakes:
+        for mistake in mistakes:
+            m_id, tl, agent, t_id, desc, ts = mistake
+            with st.expander(f"Mistake #{m_id} - {agent}"):
+                st.markdown(f"""
+                **Team Leader:** {tl}  
+                **Ticket ID:** {t_id}  
+                **Description:** {desc}  
+                **Timestamp:** {ts}
+                """)
+    else:
+        st.info("No mistakes recorded.")
 
 def search_section():
     st.header("🔍 Search")
-    # Placeholder for search functionality
-    st.write("Search section coming soon!")
+    
+    # Search Requests
+    st.subheader("Search Requests")
+    search_type = st.selectbox("Search By", ["Agent Name", "Request Type", "Identifier"])
+    
+    search_query = st.text_input("Search Term")
+    
+    if st.button("Search Requests"):
+        if search_query:
+            requests = get_requests()
+            
+            # Filter requests based on search type
+            filtered_requests = []
+            for req in requests:
+                if search_type == "Agent Name" and search_query.lower() in req[1].lower():
+                    filtered_requests.append(req)
+                elif search_type == "Request Type" and search_query.lower() in req[2].lower():
+                    filtered_requests.append(req)
+                elif search_type == "Identifier" and search_query.lower() in req[3].lower():
+                    filtered_requests.append(req)
+            
+            # Display results
+            if filtered_requests:
+                st.subheader("Search Results")
+                for req in filtered_requests:
+                    st.markdown(f"""
+                    **Request ID:** {req[0]}  
+                    **Agent:** {req[1]} | **Type:** {req[2]}  
+                    **Identifier:** {req[3]}  
+                    **Comments:** {req[4]}  
+                    **Timestamp:** {req[5]}
+                    """)
+                    st.divider()
+            else:
+                st.info("No matching requests found.")
+        else:
+            st.warning("Please enter a search term")
 
 def admin_tools_section():
     st.header("⚙️ Admin Tools")
-    # Placeholder for admin tools
-    st.write("Admin tools section coming soon!")
-
-# Main App Flow
-def main():
-    if not st.session_state.authenticated:
-        login_page()
-    else:
-        main_dashboard()
+    
+    # Tabs for different admin functionalities
+    tab1, tab2, tab3 = st.tabs(["User Management", "System Logs", "Data Management"])
+    
+    with tab1:
+        st.subheader("User Management")
         
-        # Logout functionality
-        if st.sidebar.button("🚪 Logout"):
-            st.session_state.authenticated = False
-            st.session_state.role = None
-            st.session_state.username = None
-            st.rerun()
+        # Create New User
+        with st.expander("Create New User"):
+            with st.form("create_user_form"):
+                new_username = st.text_input("Username")
+                new_password = st.text_input("Password", type="password")
+                new_role = st.selectbox("Role", ["agent", "admin"])
+                
+                if st.form_submit_button("Create User"):
+                    if new_username and new_password:
+                        if create_user(new_username, new_password, new_role):
+                            st.success("User created successfully!")
+                    else:
+                        st.warning("Please enter both username and password")
+        
+        # Existing Users Management
+        st.subheader("Existing Users")
+        users = get_all_users()
+        
+        for user in users:
+            user_id, username, role = user
+            
+            with st.expander(f"{username} ({role})"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.write("Change Role")
+                    new_role = st.selectbox(
+                        "Select Role", 
+                        ["agent", "admin"], 
+                        index=0 if role == "agent" else 1,
+                        key=f"role_{user_id}"
+                    )
+                    if st.button(f"Update Role for {username}", key=f"update_role_{user_id}"):
+                        if update_user_role(user_id, new_role):
+                            st.success("Role updated!")
+                
+                with col2:
+                    st.write("Reset Password")
+                    new_password = st.text_input(
+                        "New Password", 
+                        type="password", 
+                        key=f"reset_pass_{user_id}"
+                    )
+                    if st.button(f"Reset Password for {username}", key=f"reset_btn_{user_id}"):
+                        if new_password:
+                            if reset_user_password(user_id, new_password):
+                                st.success("Password reset successfully!")
+                        else:
+                            st.warning("Please enter a new password")
+                
+                with col3:
+                    st.write("User Deletion")
+                    if st.button(f"Delete {username}", key=f"delete_{user_id}"):
+                        if delete_user(user_id):
+                            st.success("User deleted!")
+    
+    with tab2:
+        st.subheader("System Logs")
+        st.write("Recent Group Messages")
+        group_messages = get_group_messages()
+        
+        for msg in group_messages[-10:]:  # Last 10 messages
+            st.markdown(f"**{msg[1]}** at {msg[3]}: {msg[2]}")
+    
+    with tab3:
+        st.subheader("Data Management")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("Clear Requests")
+            if st.button("Clear All Requests"):
+                conn = sqlite3.connect("data/requests.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM requests")
+                conn.commit()
+                conn.close()
+                st.success("All requests cleared!")
+        
+        with col2:
+            st.write("Clear Mistakes")
+            if st.button("Clear All Mistakes"):
+                conn = sqlite3.connect("data/requests.db")
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM mistakes")
+                conn.commit()
+                conn.close()
+                st.success("All mistakes cleared!")
 
-# Run the app
-if __name__ == "__main__":
-    main()
+# ... [Rest of the previous code remains the same]
