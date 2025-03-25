@@ -26,6 +26,9 @@ def init_db():
             completed INTEGER DEFAULT 0
         )
     """)
+    cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)
+    """, ("TAHA KIRRI", hashlib.sha256("arise@99".encode()).hexdigest(), "admin"))
     conn.commit()
     conn.close()
 
@@ -105,3 +108,6 @@ else:
             conn.commit()
             conn.close()
             st.success("All requests cleared!")
+
+# Initialize database
+init_db()
