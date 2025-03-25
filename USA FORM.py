@@ -20,95 +20,37 @@ st.set_page_config(page_title="USA Collab", layout="wide")  # Set page title and
 st.title("USA Collab")
 st.markdown("<hr>", unsafe_allow_html=True)
 
-# Add custom CSS for styling
-st.markdown("""
-    <style>
-        /* Page title and header */
-        .css-1j7c2tb { 
-            font-size: 36px; 
-            font-weight: bold; 
-            text-align: center; 
-            color: #333;
-        }
+# Sidebar for navigation
+with st.sidebar:
+    st.image('https://www.example.com/logo.png', width=100)  # Optionally add a logo
+    st.markdown("### Navigation")
+    section = st.radio("Choose Section", ["Request", "HOLD", "Ticket Mistakes"])
 
-        /* Section headers */
-        .css-16cv6of {
-            font-size: 28px;
-            font-weight: bold;
-            color: #0073e6;
-        }
-
-        /* Styling for columns */
-        .streamlit-expanderHeader {
-            font-weight: bold;
-            font-size: 20px;
-        }
-
-        /* Table styling */
-        .stDataFrame {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 20px;
-        }
-
-        .stDataFrame th, .stDataFrame td {
-            padding: 12px 15px;
-            text-align: left;
-            border: 1px solid #ddd;
-            font-size: 16px;
-        }
-
-        .stDataFrame th {
-            background-color: #0073e6;
-            color: white;
-            font-weight: bold;
-        }
-
-        /* Alternating row colors */
-        .stDataFrame tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-
-        .stDataFrame tr:nth-child(odd) {
-            background-color: #ffffff;
-        }
-
-        /* Buttons */
-        .stButton>button {
-            background-color: #0073e6;
-            color: white;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 16px;
-        }
-
-        .stButton>button:hover {
-            background-color: #005bb5;
-        }
-
-        /* Input fields */
-        .stTextInput, .stSelectbox, .stTextArea {
-            font-size: 16px;
-            border-radius: 8px;
-            padding: 10px;
-        }
-
-        /* Adjustments for images */
-        .stImage {
-            border-radius: 10px;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-        }
-
-        /* Customizing section padding */
-        .css-1v3fvcr { padding: 20px; }
-    </style>
-""", unsafe_allow_html=True)
-
-# Tabs for navigation
-tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"], label_visibility="collapsed")
+    # Dark Mode / Light Mode Toggle
+    dark_mode = st.checkbox("Dark Mode", value=False)
+    if dark_mode:
+        st.markdown("""
+            <style>
+                body { background-color: #1e1e1e; color: white; }
+                .stButton>button { background-color: #333; color: white; }
+                .stDataFrame { background-color: #333; color: white; }
+                .stTextInput, .stSelectbox, .stTextArea { background-color: #444; color: white; }
+                .css-1j7c2tb { color: white; }
+            </style>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <style>
+                body { background-color: #f0f0f0; color: black; }
+                .stButton>button { background-color: #0073e6; color: white; }
+                .stDataFrame { background-color: white; color: black; }
+                .stTextInput, .stSelectbox, .stTextArea { background-color: white; color: black; }
+                .css-1j7c2tb { color: black; }
+            </style>
+        """, unsafe_allow_html=True)
 
 # Request Tab
-if tab == "Request":
+if section == "Request":
     st.header("Request Section")
     
     # Layout with columns for better alignment
@@ -122,9 +64,9 @@ if tab == "Request":
     with col2:
         comment_input = st.text_area("Comment", height=150, key="comment")
     
-    # Buttons for submission and refresh with improved styling
-    submit_button = st.button("Submit Data")
-    refresh_button = st.button("Refresh Data")
+    # Buttons for submission and refresh with icons
+    submit_button = st.button("Submit Data", icon="check_circle")
+    refresh_button = st.button("Refresh Data", icon="refresh")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -145,12 +87,12 @@ if tab == "Request":
 
     if refresh_button:
         st.write("Latest Submitted Data:")
-        st.dataframe(data)  # Display the data with the added styling
+        st.dataframe(data)  # Display the data without the additional styling (removing color formatting)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
 # HOLD Tab
-if tab == "HOLD":
+if section == "HOLD":
     st.header("HOLD Section")
     uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
     
@@ -158,7 +100,7 @@ if tab == "HOLD":
         image = Image.open(uploaded_image)
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    if st.button("CHECK HOLD"):
+    if st.button("CHECK HOLD", icon="search"):
         if uploaded_image:
             st.image(image, caption="Latest Uploaded Image", use_column_width=True)
         else:
@@ -166,7 +108,7 @@ if tab == "HOLD":
     st.markdown("<hr>", unsafe_allow_html=True)
 
 # Ticket Mistakes Tab
-if tab == "Ticket Mistakes":
+if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
     
     # Layout with columns for better alignment
@@ -180,9 +122,9 @@ if tab == "Ticket Mistakes":
     with col2:
         error_input = st.text_area("Error", height=150, key="error")
     
-    # Buttons for submission and refresh with improved styling
-    submit_mistake_button = st.button("Submit Mistake")
-    refresh_mistake_button = st.button("Refresh Mistakes")
+    # Buttons for submission and refresh with icons
+    submit_mistake_button = st.button("Submit Mistake", icon="check_circle")
+    refresh_mistake_button = st.button("Refresh Mistakes", icon="refresh")
     
     if submit_mistake_button:
         # Ensure fields are filled out before submission
@@ -203,6 +145,6 @@ if tab == "Ticket Mistakes":
 
     if refresh_mistake_button:
         st.write("Mistakes Table:")
-        st.dataframe(data)  # Display the mistakes table with the added styling
+        st.dataframe(data)  # Display the mistakes table
 
     st.markdown("<hr>", unsafe_allow_html=True)
