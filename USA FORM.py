@@ -101,12 +101,13 @@ if tab == "Request":
     
     # Clear Data functionality with confirmation
     if clear_button:
-        confirm_clear = st.confirm("Are you sure you want to delete all the data?")
-        if confirm_clear:
+        # Use st.radio or st.selectbox to confirm data deletion
+        confirm_clear = st.radio("Are you sure you want to delete all data?", ["No", "Yes"])
+        if confirm_clear == "Yes":
             data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
             data.to_csv(DATA_FILE, index=False)  # Save the empty data to CSV
             st.success("All data has been cleared!")
-        else:
+        elif confirm_clear == "No":
             st.info("Data has not been cleared.")
     
     # Additional space for better layout
