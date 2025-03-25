@@ -5,17 +5,22 @@ import os
 import sqlite3
 from contextlib import closing
 from PIL import Image
+import time
+import zipfile
+import plotly.express as px
 
-# --- Database Setup ---
+# --- Constants ---
 DB_NAME = 'collab_app.db'
 UPLOAD_DIRECTORY = 'uploaded_images'
 os.makedirs(UPLOAD_DIRECTORY, exist_ok=True)
 LATEST_IMAGE_PATH = os.path.join(UPLOAD_DIRECTORY, 'latest_hold_image.jpg')
+AUTO_REFRESH_INTERVAL = 300  # 5 minutes
+USER_CREDENTIALS = {"admin": "admin123", "agent1": "pass123"}
 
+# --- Database Setup ---
 def init_db():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         cursor = conn.cursor()
-        # Requests table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +32,6 @@ def init_db():
                 timestamp TEXT NOT NULL
             )
         ''')
-        # Mistakes table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,11 +42,23 @@ def init_db():
                 timestamp TEXT NOT NULL
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY,
+                recipient TEXT,
+                message TEXT,
+                is_read BOOLEAN DEFAULT 0,
+                created_at TEXT
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_requests_agent ON requests(agent_name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient)')
         conn.commit()
 
 def get_db_connection():
     return sqlite3.connect(DB_NAME)
 
+@st.cache_data(ttl=60)
 def execute_query(query, params=(), fetch=False):
     with closing(get_db_connection()) as conn:
         cursor = conn.cursor()
@@ -51,14 +67,40 @@ def execute_query(query, params=(), fetch=False):
             return cursor.fetchall()
         conn.commit()
 
+@st.cache_data(ttl=30)
 def get_requests_df():
     return pd.read_sql('SELECT * FROM requests', get_db_connection())
 
+@st.cache_data(ttl=30)
 def get_mistakes_df():
     return pd.read_sql('SELECT * FROM mistakes', get_db_connection())
 
+def create_notification(recipient, message):
+    execute_query('''
+        INSERT INTO notifications (recipient, message, created_at)
+        VALUES (?, ?, ?)
+    ''', (recipient, message, datetime.now().isoformat()))
+
 # Initialize database
 init_db()
+
+# --- Authentication ---
+def authenticate():
+    if 'authenticated' not in st.session_state:
+        with st.sidebar:
+            st.subheader("Login")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            if st.button("Login"):
+                if USER_CREDENTIALS.get(username) == password:
+                    st.session_state.authenticated = True
+                    st.session_state.user = username
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+        st.stop()
+
+authenticate()
 
 # --- UI Configuration ---
 st.set_page_config(
@@ -68,147 +110,202 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Theme Management ---
-with st.sidebar:
-    st.markdown("### 🧭 Navigation")
-    section = st.radio("Choose Section", [
-        "📋 Request", 
-        "🖼️ HOLD", 
-        "❌ Ticket Mistakes"
-    ])
-    
-    # Theme toggle
-    dark_mode = st.toggle("🌙 Dark Mode", value=True)
-
-# Theme CSS
-if dark_mode:
-    theme_css = """
-    <style>
-        :root {
-            --primary-text: #ffffff;
-            --secondary-text: #f0f0f0;
-            --background: #0e1117;
-            --sidebar: #1e2129;
-            --header: #4db8ff;
-            --input-bg: #2c2f36;
-            --input-border: #4a4e57;
-            --input-text: #ffffff;
-            --button-bg: #4db8ff;
-            --button-hover: #3aa0ff;
-            --button-text: #ffffff;
-            --table-bg: #1e2129;
-            --table-text: #ffffff;
-        }
-    </style>
-    """
-else:
-    theme_css = """
-    <style>
-        :root {
-            --primary-text: #000000;
-            --secondary-text: #333333;
-            --background: #ffffff;
-            --sidebar: #f0f2f6;
-            --header: #0068c9;
-            --input-bg: #ffffff;
-            --input-border: #d1d5db;
-            --input-text: #000000;
-            --button-bg: #0068c9;
-            --button-hover: #0055a5;
-            --button-text: #ffffff;
-            --table-bg: #ffffff;
-            --table-text: #000000;
-        }
-    </style>
-    """
-
-common_css = """
+# --- Responsive Design CSS ---
+st.markdown("""
 <style>
-    .stApp {
-        background-color: var(--background);
-        color: var(--primary-text);
+    @media screen and (max-width: 768px) {
+        .stColumns > div {
+            flex-direction: column !important;
+        }
+        .stTextInput input, .stTextArea textarea, .stSelectbox select {
+            font-size: 14px !important;
+        }
+        .stButton button {
+            padding: 8px 12px !important;
+            font-size: 14px !important;
+        }
     }
+    
+    /* Dark/Light theme variables will be added dynamically */
+    :root {
+        --primary-text: #000000;
+        --secondary-text: #333333;
+        --background: #ffffff;
+        --sidebar: #f0f2f6;
+        --header: #0068c9;
+        --input-bg: #ffffff;
+        --input-border: #d1d5db;
+        --input-text: #000000;
+        --button-bg: #0068c9;
+        --button-hover: #0055a5;
+        --button-text: #ffffff;
+        --table-bg: #ffffff;
+        --table-text: #000000;
+    }
+    
     [data-testid="stSidebar"] {
-        background-color: var(--sidebar);
+        background-color: var(--sidebar) !important;
+    }
+    .stApp {
+        background-color: var(--background) !important;
+        color: var(--primary-text) !important;
     }
     h1, h2, h3, h4 {
-        color: var(--header);
+        color: var(--header) !important;
     }
     .stTextInput > div > div > input, 
     .stSelectbox > div > div > div > select,
     .stTextArea > div > div > textarea {
-        background-color: var(--input-bg);
-        color: var(--input-text);
-        border: 1px solid var(--input-border);
+        background-color: var(--input-bg) !important;
+        color: var(--input-text) !important;
+        border: 1px solid var(--input-border) !important;
     }
-    .dataframe {
-        background-color: var(--table-bg);
-        color: var(--table-text);
+    .stDataFrame {
+        background-color: var(--table-bg) !important;
+        color: var(--table-text) !important;
     }
     .stButton > button {
-        background-color: var(--button-bg);
-        color: var(--button-text);
-        border: none;
+        background-color: var(--button-bg) !important;
+        color: var(--button-text) !important;
     }
     .stButton > button:hover {
-        background-color: var(--button-hover);
-    }
-    .stCheckbox label, .stRadio label, 
-    .stTextInput label, .stTextArea label {
-        color: var(--primary-text) !important;
+        background-color: var(--button-hover) !important;
     }
 </style>
-"""
+""", unsafe_allow_html=True)
 
-st.markdown(theme_css + common_css, unsafe_allow_html=True)
+# --- Theme Toggle ---
+with st.sidebar:
+    dark_mode = st.toggle("🌙 Dark Mode", value=False)
+    if dark_mode:
+        st.markdown("""
+        <style>
+            :root {
+                --primary-text: #ffffff;
+                --secondary-text: #f0f0f0;
+                --background: #0e1117;
+                --sidebar: #1e2129;
+                --header: #4db8ff;
+                --input-bg: #2c2f36;
+                --input-border: #4a4e57;
+                --input-text: #ffffff;
+                --button-bg: #4db8ff;
+                --button-hover: #3aa0ff;
+                --table-bg: #1e2129;
+                --table-text: #ffffff;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+
+# --- Auto-Refresh ---
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+if time.time() - st.session_state.last_refresh > AUTO_REFRESH_INTERVAL:
+    st.session_state.last_refresh = time.time()
+    st.rerun()
+
+# --- Notification System ---
+def show_notifications():
+    unread_count = execute_query(
+        "SELECT COUNT(*) FROM notifications WHERE recipient = ? AND is_read = 0",
+        (st.session_state.user,),
+        fetch=True
+    )[0][0]
+    
+    with st.sidebar:
+        if st.button(f"🔔 Notifications ({unread_count})"):
+            st.session_state.show_notifications = not st.session_state.get('show_notifications', False)
+        
+        if st.session_state.get('show_notifications'):
+            with st.expander("Your Notifications", expanded=True):
+                notifs = pd.read_sql(
+                    '''SELECT message, created_at FROM notifications 
+                    WHERE recipient = ? ORDER BY created_at DESC LIMIT 10''',
+                    get_db_connection(),
+                    params=(st.session_state.user,)
+                
+                for _, row in notifs.iterrows():
+                    st.write(f"{row['created_at']}: {row['message']}")
+                
+                execute_query(
+                    "UPDATE notifications SET is_read = 1 WHERE recipient = ?",
+                    (st.session_state.user,)
+                )
+
+show_notifications()
+
+# --- Backup System ---
+with st.sidebar.expander("💾 Backup Tools"):
+    if st.button("Create Backup"):
+        backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        with open(DB_NAME, 'rb') as f_src, open(backup_name, 'wb') as f_dst:
+            f_dst.write(f_src.read())
+        st.success(f"Backup created: {backup_name}")
+    
+    backups = [f for f in os.listdir() if f.startswith('backup_') and f.endswith('.db')]
+    selected_backup = st.selectbox("Select Backup", backups)
+    
+    if st.button("Restore Backup"):
+        with open(selected_backup, 'rb') as f_src, open(DB_NAME, 'wb') as f_dst:
+            f_dst.write(f_src.read())
+        st.cache_data.clear()
+        st.success("Database restored! Please refresh the page.")
+
+# --- Navigation ---
+with st.sidebar:
+    st.markdown("### 🧭 Navigation")
+    section = st.radio("Go to", ["📋 Request", "🖼️ HOLD", "❌ Ticket Mistakes"])
 
 # --- Request Section ---
 if section == "📋 Request":
     st.header("📋 Request Section")
-
-    col1, col2 = st.columns([3, 2])
     
-    with col1:
-        agent_name_input = st.text_input("👤 Agent Name", key="agent_name")
-        type_input = st.selectbox("🔍 Type", ["Email", "Phone Number", "Ticket ID"], key="type")
-        id_input = st.text_input("🆔 ID", key="id")
-    
-    with col2:
-        comment_input = st.text_area("💬 Comment", height=150, key="comment")  
-    
-    btn_col1, btn_col2, btn_col3 = st.columns(3)
-    
-    with btn_col1:
-        submit_button = st.button("✅ Submit Data")
-    
-    with btn_col2:
-        refresh_button = st.button("🔄 Refresh Data")
-    
-    with btn_col3:
-        clear_button = st.button("🗑️ Clear Data")
-    
-    if clear_button:
-        clear_password = st.text_input("🔐 Enter password to clear data:", type="password", key="clear_password")
-        if clear_password == "wipe":
-            execute_query("DELETE FROM requests")
-            st.success("✅ Request data has been cleared!")
-        elif clear_password:
-            st.error("❌ Incorrect password")
-    
-    if submit_button:
-        if not agent_name_input or not id_input or not comment_input:
-            st.error("❗ Please fill out all fields.")
-        else:
-            execute_query('''
-                INSERT INTO requests (agent_name, type, identifier, comment, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (agent_name_input, type_input, id_input, comment_input, 
-                  datetime.now().strftime("%H:%M:%S")))
-            st.success("✅ Data Submitted!")
-
+    # Metrics Dashboard
     request_data = get_requests_df()
     if not request_data.empty:
-        st.write("### 📋 Submitted Requests:")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Requests", len(request_data))
+        with col2:
+            st.metric("Completed", request_data['completed'].sum())
+        with col3:
+            st.metric("Completion Rate", 
+                     f"{(request_data['completed'].sum()/len(request_data)*100:.1f}%")
+    
+    # Request Form
+    with st.form("request_form"):
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            agent_name = st.text_input("👤 Agent Name", value=st.session_state.user)
+            req_type = st.selectbox("🔍 Type", ["Email", "Phone Number", "Ticket ID"])
+            identifier = st.text_input("🆔 ID")
+        with col2:
+            comment = st.text_area("💬 Comment", height=150)
+        
+        submitted = st.form_submit_button("✅ Submit Request")
+        if submitted:
+            if not all([agent_name, req_type, identifier, comment]):
+                st.error("Please fill all fields")
+            else:
+                execute_query('''
+                    INSERT INTO requests (agent_name, type, identifier, comment, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (agent_name, req_type, identifier, comment, datetime.now().isoformat()))
+                
+                # Create notification for admin
+                create_notification(
+                    "admin",
+                    f"New request submitted by {agent_name}: {req_type} - {identifier}"
+                )
+                
+                st.success("Request submitted!")
+                time.sleep(1)
+                st.rerun()
+    
+    # Request List
+    if not request_data.empty:
+        st.subheader("📋 Request List")
         edited_df = st.data_editor(
             request_data,
             column_config={
@@ -223,7 +320,7 @@ if section == "📋 Request":
             use_container_width=True
         )
         
-        # Update completed status
+        # Save changes
         for _, row in edited_df.iterrows():
             execute_query(
                 'UPDATE requests SET completed = ? WHERE id = ?',
@@ -233,82 +330,88 @@ if section == "📋 Request":
 # --- HOLD Section ---
 elif section == "🖼️ HOLD":
     st.header("🖼️ HOLD Section")
-    uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    
+    uploaded_image = st.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
     
     if uploaded_image:
         try:
-            image = Image.open(uploaded_image)
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            os.makedirs(os.path.dirname(LATEST_IMAGE_PATH), exist_ok=True)
-            image.save(LATEST_IMAGE_PATH, quality=85)
-            st.image(image, caption="📸 Uploaded Image", use_container_width=True)
-            st.success("✅ Image uploaded successfully!")
+            img = Image.open(uploaded_image)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(LATEST_IMAGE_PATH, quality=85)
+            st.image(img, caption="Uploaded Image", use_column_width=True)
+            st.success("Image saved successfully!")
+            
+            # Notify admin
+            create_notification(
+                "admin",
+                f"New HOLD image uploaded by {st.session_state.user}"
+            )
         except Exception as e:
-            st.error(f"❌ Error uploading image: {str(e)}")
-
-    if st.button("🔍 CHECK HOLD"):
+            st.error(f"Error saving image: {str(e)}")
+    
+    if st.button("🔄 View Latest HOLD Image"):
         if os.path.exists(LATEST_IMAGE_PATH):
-            try:
-                latest_image = Image.open(LATEST_IMAGE_PATH)
-                st.image(latest_image, caption="📸 Latest Uploaded Image", use_container_width=True)
-            except Exception as e:
-                st.error(f"❌ Error displaying image: {str(e)}")
+            st.image(Image.open(LATEST_IMAGE_PATH), use_column_width=True)
         else:
-            st.write("❌ No image uploaded.")
+            st.warning("No HOLD image available")
 
 # --- Mistakes Section ---
 elif section == "❌ Ticket Mistakes":
-    st.header("❌ Ticket Mistakes Section")
-
-    col1, col2 = st.columns([3, 2])  
+    st.header("❌ Ticket Mistakes")
     
-    with col1:
-        team_leader_input = st.text_input("👥 Team Leader Name", key="team_leader")
-        agent_name_mistake_input = st.text_input("👤 Agent Name", key="agent_name_mistake")
-        ticket_id_input = st.text_input("🆔 Ticket ID", key="ticket_id")
-    
-    with col2:
-        error_input = st.text_area("⚠️ Error", height=150, key="error")
-    
-    btn_col1, btn_col2 = st.columns(2)
-    
-    with btn_col1:
-        submit_mistake_button = st.button("✅ Submit Mistake")
-    
-    with btn_col2:
-        refresh_mistake_button = st.button("🔄 Refresh Mistakes")
-    
-    if submit_mistake_button:
-        if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
-            st.error("❗ Please fill out all fields.")
-        else:
-            execute_query('''
-                INSERT INTO mistakes (team_leader, agent_name, ticket_id, error, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (team_leader_input, agent_name_mistake_input, ticket_id_input, 
-                  error_input, datetime.now().strftime("%H:%M:%S")))
-            st.success("✅ Mistake Submitted!")
-
-    if refresh_mistake_button:
-        st.rerun()
-
-    mistake_data = get_mistakes_df()
-    if not mistake_data.empty:
-        st.write("❌ Mistakes Table:")
-        st.dataframe(mistake_data, use_container_width=True)
-
-# --- Migration Utility (One-time use) ---
-with st.sidebar:
-    if st.checkbox("Show Developer Options"):
-        if st.button("⚠️ Initialize Database"):
-            init_db()
-            st.success("Database initialized!")
+    with st.form("mistake_form"):
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            team_leader = st.text_input("👥 Team Leader")
+            agent_name = st.text_input("👤 Agent Name")
+            ticket_id = st.text_input("🎫 Ticket ID")
+        with col2:
+            error = st.text_area("⚠️ Error Description", height=150)
         
-        if st.button("🔄 Export Requests to CSV"):
-            df = get_requests_df()
-            st.download_button(
-                "Download Requests",
-                df.to_csv(index=False),
-                "requests_export.csv"
-            )
+        submitted = st.form_submit_button("✅ Submit Mistake")
+        if submitted:
+            if not all([team_leader, agent_name, ticket_id, error]):
+                st.error("Please fill all fields")
+            else:
+                execute_query('''
+                    INSERT INTO mistakes (team_leader, agent_name, ticket_id, error, timestamp)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (team_leader, agent_name, ticket_id, error, datetime.now().isoformat()))
+                
+                # Notify team leader
+                create_notification(
+                    team_leader,
+                    f"New mistake reported for {agent_name} on ticket {ticket_id}"
+                )
+                
+                st.success("Mistake reported!")
+                time.sleep(1)
+                st.rerun()
+    
+    # Mistakes List
+    mistakes = get_mistakes_df()
+    if not mistakes.empty:
+        st.subheader("❌ Mistakes Log")
+        st.dataframe(mistakes, use_container_width=True)
+
+# --- Auto-Refresh Controls ---
+with st.sidebar.expander("⚙️ Settings"):
+    auto_refresh = st.checkbox("Enable Auto-Refresh", value=True)
+    if auto_refresh:
+        refresh_rate = st.slider("Refresh Rate (seconds)", 30, 600, AUTO_REFRESH_INTERVAL)
+        st.session_state.auto_refresh = True
+        st.session_state.refresh_rate = refresh_rate
+    else:
+        st.session_state.auto_refresh = False
+
+# --- Performance Info ---
+with st.sidebar.expander("📊 Performance"):
+    db_size = os.path.getsize(DB_NAME) / (1024 * 1024)  # in MB
+    st.write(f"Database size: {db_size:.2f} MB")
+    st.write(f"Requests count: {len(get_requests_df())}")
+    st.write(f"Mistakes count: {len(get_mistakes_df())}")
+    
+    if st.button("Clear Cache"):
+        st.cache_data.clear()
+        st.success("Cache cleared!")
