@@ -21,6 +21,7 @@ def init_db():
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin'))
+            )
         """)
         
         # Create requests table
@@ -32,7 +33,8 @@ def init_db():
                 identifier TEXT,
                 comment TEXT,
                 timestamp TEXT,
-                completed INTEGER DEFAULT 0)
+                completed INTEGER DEFAULT 0
+            )
         """)
         
         # Insert admin user if not exists
