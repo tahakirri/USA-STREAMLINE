@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import os
+from PIL import Image
 
 # Define the path to the CSV file where the data will be stored
 DATA_FILE = 'shared_data.csv'
@@ -17,7 +18,7 @@ else:
 # Function to apply conditional formatting based on the TYPE column
 def style_dataframe(df):
     def apply_style(row):
-        if row['TYPE'] == 'Phone':
+        if row['TYPE'] == 'Phone Number':  # Changed "Phone" to "Phone Number"
             return ['background-color: lightcoral'] * len(row)
         elif row['TYPE'] == 'Email':
             return ['background-color: lightblue'] * len(row)
@@ -44,7 +45,7 @@ if tab == "Request":
     
     with col1:
         agent_name_input = st.text_input("Agent Name")
-        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])
+        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"])  # Updated option here
         id_input = st.text_input("ID")
     
     with col2:
