@@ -37,9 +37,9 @@ def submit_data(agent_name, type_, id_, comment):
     data.to_csv(DATA_FILE, index=False)
 
 # Function to update the completed status
-def update_completion(index):
+def update_completion(index, completed_status):
     global data
-    data.at[index, "Completed"] = not data.at[index, "Completed"]
+    data.at[index, "Completed"] = completed_status
     data.to_csv(DATA_FILE, index=False)
 
 # Function to submit ticket mistakes data
@@ -123,14 +123,18 @@ if tab == "Request":
             col5.write(row["Timestamp"])
             
             # Use session state to manage the checkbox state
-            if f"checkbox_{index}" not in st.session_state:
-                st.session_state[f"checkbox_{index}"] = row["Completed"]
+            checkbox_key = f"checkbox_{index}"
             
-            completed = col6.checkbox("Done", value=st.session_state[f"checkbox_{index}"], key=index)
+            # Initialize the checkbox value in session_state if it doesn't exist
+            if checkbox_key not in st.session_state:
+                st.session_state[checkbox_key] = row["Completed"]
             
-            if completed != st.session_state[f"checkbox_{index}"]:
-                st.session_state[f"checkbox_{index}"] = completed
-                update_completion(index)
+            completed = col6.checkbox("Done", value=st.session_state[checkbox_key], key=checkbox_key)
+            
+            # Update the status when the checkbox is clicked
+            if completed != st.session_state[checkbox_key]:
+                st.session_state[checkbox_key] = completed
+                update_completion(index, completed)
 
 # HOLD Tab
 if tab == "HOLD":
