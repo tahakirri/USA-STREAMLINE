@@ -1,4 +1,117 @@
-# Ticket Mistakes Tab
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import os
+from PIL import Image
+
+# Define separate CSV files for each section
+REQUEST_FILE = 'request_data.csv'
+MISTAKE_FILE = 'mistake_data.csv'
+
+# Load request data with Completed column
+if os.path.exists(REQUEST_FILE):
+    request_data = pd.read_csv(REQUEST_FILE)
+    if "Completed" not in request_data.columns:
+        request_data["Completed"] = False
+else:
+    request_data = pd.DataFrame(columns=["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
+
+# Load mistake data
+if os.path.exists(MISTAKE_FILE):
+    mistake_data = pd.read_csv(MISTAKE_FILE)
+else:
+    mistake_data = pd.DataFrame(columns=["Team Leader Name", "Agent Name", "Ticket ID", "Error", "Timestamp"])
+
+# Streamlit interface settings
+st.set_page_config(page_title="USA Collab", layout="wide")  
+st.title("USA Collab")
+st.markdown("<hr>", unsafe_allow_html=True)
+
+# Sidebar for navigation
+with st.sidebar:
+    st.markdown("### Navigation")
+    section = st.radio("Choose Section", ["Request", "HOLD", "Ticket Mistakes"])
+
+# Request Tab
+if section == "Request":
+    st.header("Request Section")
+
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        agent_name_input = st.text_input("Agent Name", key="agent_name")
+        type_input = st.selectbox("Type", ["Email", "Phone Number", "Ticket ID"], key="type")
+        id_input = st.text_input("ID", key="id")
+    
+    with col2:
+        comment_input = st.text_area("Comment", height=150, key="comment")  
+    
+    submit_button = st.button("Submit Data")
+    refresh_button = st.button("Refresh Data")
+    
+    if submit_button:
+        if not agent_name_input or not id_input or not comment_input:
+            st.error("Please fill out all fields.")
+        else:
+            new_data = {
+                "Completed": False,
+                "Agent Name": agent_name_input,
+                "TYPE": type_input,
+                "ID": id_input,
+                "COMMENT": comment_input,
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
+            }
+            new_row = pd.DataFrame([new_data])
+            request_data = pd.concat([request_data, new_row], ignore_index=True)
+            request_data.to_csv(REQUEST_FILE, index=False)
+            st.success("Data Submitted!")
+
+    if not request_data.empty:
+        st.write("### Submitted Requests:")
+        
+        # Reorder columns to have Completed first
+        columns_order = ["Completed", "Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"]
+        
+        # Create a copy of the dataframe
+        display_data = request_data[columns_order].copy()
+        
+        # Modify dataframe to use custom checkbox rendering
+        edited_df = st.data_editor(
+            display_data, 
+            column_config={
+                "Completed": st.column_config.CheckboxColumn(
+                    "Completed",
+                    help="Mark request as completed",
+                    default=False
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        # Save changes back to the original dataframe and CSV
+        request_data.loc[:, columns_order] = edited_df
+        request_data.to_csv(REQUEST_FILE, index=False)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+# HOLD Tab (unchanged from previous version)
+if section == "HOLD":
+    st.header("HOLD Section")
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    
+    if uploaded_image:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+
+    if st.button("CHECK HOLD"):
+        if uploaded_image:
+            st.image(image, caption="Latest Uploaded Image", use_column_width=True)
+        else:
+            st.write("No image uploaded.")
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+# Ticket Mistakes Tab (unchanged from previous version)
 if section == "Ticket Mistakes":
     st.header("Ticket Mistakes Section")
 
@@ -10,23 +123,10 @@ if section == "Ticket Mistakes":
         ticket_id_input = st.text_input("Ticket ID", key="ticket_id")
     
     with col2:
-        error_type = st.selectbox("Error Type", [
-            "Communication Error", 
-            "Technical Error", 
-            "Process Error", 
-            "Quality Error", 
-            "Other"
-        ], key="error_type")
-        error_input = st.text_area("Error Description", height=150, key="error")
+        error_input = st.text_area("Error", height=150, key="error")
     
-    # Additional context for mistake
-    severity = st.slider("Severity of Mistake", min_value=1, max_value=5, value=3, key="severity")
-    
-    col_submit, col_refresh = st.columns(2)
-    with col_submit:
-        submit_mistake_button = st.button("Submit Mistake")
-    with col_refresh:
-        refresh_mistake_button = st.button("Refresh Mistakes")
+    submit_mistake_button = st.button("Submit Mistake")
+    refresh_mistake_button = st.button("Refresh Mistakes")
     
     if submit_mistake_button:
         if not team_leader_input or not agent_name_mistake_input or not ticket_id_input or not error_input:
@@ -36,60 +136,16 @@ if section == "Ticket Mistakes":
                 "Team Leader Name": team_leader_input,
                 "Agent Name": agent_name_mistake_input,
                 "Ticket ID": ticket_id_input,
-                "Error Type": error_type,
-                "Error Description": error_input,
-                "Severity": severity,
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "Error": error_input,
+                "Timestamp": datetime.now().strftime("%H:%M:%S")
             }
             new_row = pd.DataFrame([new_mistake])
             mistake_data = pd.concat([mistake_data, new_row], ignore_index=True)
             mistake_data.to_csv(MISTAKE_FILE, index=False)
-            st.success("Mistake Submitted Successfully! 🚨")
+            st.success("Mistake Submitted!")
 
-    # Display and filter mistakes
-    if not mistake_data.empty:
-        st.write("### Mistakes Overview")
-        
-        # Filter options
-        col_filter1, col_filter2 = st.columns(2)
-        
-        with col_filter1:
-            filter_agent = st.multiselect(
-                "Filter by Agent", 
-                options=mistake_data["Agent Name"].unique(),
-                default=[]
-            )
-        
-        with col_filter2:
-            filter_error_type = st.multiselect(
-                "Filter by Error Type", 
-                options=mistake_data["Error Type"].unique(),
-                default=[]
-            )
-        
-        # Apply filters
-        filtered_data = mistake_data.copy()
-        
-        if filter_agent:
-            filtered_data = filtered_data[filtered_data["Agent Name"].isin(filter_agent)]
-        
-        if filter_error_type:
-            filtered_data = filtered_data[filtered_data["Error Type"].isin(filter_error_type)]
-        
-        # Display filtered data
-        st.dataframe(filtered_data, use_container_width=True)
-        
-        # Basic statistics
-        st.write("### Mistake Statistics")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.metric("Total Mistakes", len(mistake_data))
-            st.metric("Unique Agents", mistake_data["Agent Name"].nunique())
-        
-        with col2:
-            st.metric("Average Mistake Severity", f"{mistake_data['Severity'].mean():.2f}/5")
-            most_common_error = mistake_data["Error Type"].mode().values[0]
-            st.metric("Most Common Error Type", most_common_error)
+    if refresh_mistake_button or not mistake_data.empty:
+        st.write("Mistakes Table:")
+        st.dataframe(mistake_data, use_container_width=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
