@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from PIL import Image
 import os
 
 # Define the path to the CSV file where the data will be stored
@@ -35,15 +36,33 @@ def submit_data(agent_name, type_, id_, comment):
     data.to_csv(DATA_FILE, index=False)
     return data
 
+# Function to submit ticket mistakes data
+def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
+    global ticket_mistakes
+    new_mistake = {
+        "Team Leader Name": team_leader,
+        "Agent Name": agent_name,
+        "Ticket ID": ticket_id,
+        "Error": error,
+        "Timestamp": datetime.now().strftime("%H:%M:%S")
+    }
+    new_row = pd.DataFrame([new_mistake])
+    ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
+    ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
+    return ticket_mistakes
+
 # Function to refresh data
 def refresh_data():
     return data
+
+def refresh_ticket_mistakes():
+    return ticket_mistakes
 
 # Streamlit interface
 st.title("USA Collab")
 
 # Tabs
-tab = st.radio("Choose a Section", ["Request", "Ticket Mistakes"])
+tab = st.radio("Choose a Section", ["Request", "HOLD", "Ticket Mistakes"])
 
 # Request Tab
 if tab == "Request":
@@ -62,6 +81,21 @@ if tab == "Request":
     if st.button("Refresh Data"):
         st.write("Data Table:")
         st.write(data)  # Display the data as it is
+
+# HOLD Tab
+if tab == "HOLD":
+    st.header("HOLD Section")
+    uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
+    
+    if uploaded_image:
+        image = Image.open(uploaded_image)
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+    
+    if st.button("CHECK HOLD"):
+        if uploaded_image:
+            st.image(image, caption="Latest Uploaded Image", use_column_width=True)
+        else:
+            st.write("No image uploaded.")
 
 # Ticket Mistakes Tab
 if tab == "Ticket Mistakes":
