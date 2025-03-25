@@ -104,9 +104,12 @@ if tab == "Request":
         # Use st.radio or st.selectbox to confirm data deletion
         confirm_clear = st.radio("Are you sure you want to delete all data?", ["No", "Yes"])
         if confirm_clear == "Yes":
+            # Clear the data and save the empty DataFrame
             data = pd.DataFrame(columns=["Agent Name", "TYPE", "ID", "COMMENT", "Timestamp"])
             data.to_csv(DATA_FILE, index=False)  # Save the empty data to CSV
             st.success("All data has been cleared!")
+            st.write("Latest Submitted Data:")  # Show that data is now empty
+            st.write(data)  # Display the empty DataFrame
         elif confirm_clear == "No":
             st.info("Data has not been cleared.")
     
