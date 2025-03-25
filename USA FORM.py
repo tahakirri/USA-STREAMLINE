@@ -84,6 +84,7 @@ if tab == "Request":
     
     # Buttons for submission and refresh
     submit_button = st.button("Submit Data")
+    refresh_button = st.button("Refresh Data")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -94,6 +95,10 @@ if tab == "Request":
             st.success("Data Submitted!")
             st.write("Latest Submitted Data:")
             st.write(data)  # Automatically display the refreshed data
+    
+    if refresh_button:
+        st.write("Latest Submitted Data:")
+        st.write(data)  # Show the data when refresh is clicked
     
     # Additional space for better layout
     st.markdown("---")
@@ -133,6 +138,7 @@ if tab == "Ticket Mistakes":
     
     # Buttons for submission and refresh
     submit_button = st.button("Submit Mistake")
+    refresh_button = st.button("Refresh Mistakes")
     
     if submit_button:
         # Ensure fields are filled out before submission
@@ -143,6 +149,10 @@ if tab == "Ticket Mistakes":
             st.success("Mistake Submitted!")
             st.write("Mistakes Table:")
             st.write(ticket_mistakes)  # Automatically display the refreshed data
+    
+    if refresh_button:
+        st.write("Mistakes Table:")
+        st.write(ticket_mistakes)  # Show the ticket mistakes data when refresh is clicked
     
     # Additional space for better layout
     st.markdown("---")
