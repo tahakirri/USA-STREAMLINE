@@ -8,6 +8,13 @@ import os
 DATA_FILE = 'shared_data.csv'
 TICKET_MISTAKES_FILE = 'ticket_mistakes.csv'
 
+# Path where images will be saved
+IMAGE_SAVE_PATH = 'uploaded_images/'
+
+# Create the directory if it doesn't exist
+if not os.path.exists(IMAGE_SAVE_PATH):
+    os.makedirs(IMAGE_SAVE_PATH)
+
 # Load the data from the CSV file if it exists
 if os.path.exists(DATA_FILE):
     data = pd.read_csv(DATA_FILE)
@@ -51,6 +58,13 @@ def submit_ticket_mistake(team_leader, agent_name, ticket_id, error):
     ticket_mistakes = pd.concat([ticket_mistakes, new_row], ignore_index=True)
     ticket_mistakes.to_csv(TICKET_MISTAKES_FILE, index=False)
     return ticket_mistakes
+
+# Function to save and return the file path for uploaded images
+def save_uploaded_image(uploaded_image):
+    image_path = os.path.join(IMAGE_SAVE_PATH, uploaded_image.name)
+    with open(image_path, "wb") as f:
+        f.write(uploaded_image.getbuffer())
+    return image_path
 
 # Function to refresh data
 def refresh_data():
@@ -107,14 +121,23 @@ if tab == "Request":
 if tab == "HOLD":
     st.header("HOLD Section")
     uploaded_image = st.file_uploader("Upload Image (HOLD Section)", type=["jpg", "jpeg", "png"])
-    
+
     if uploaded_image:
-        image = Image.open(uploaded_image)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        # Save the uploaded image
+        image_path = save_uploaded_image(uploaded_image)
+        st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
     
+    # Check if the uploaded image exists and show it
     if st.button("CHECK HOLD"):
-        if uploaded_image:
-            st.image(image, caption="Latest Uploaded Image", use_column_width=True)
+        # List all uploaded images in the folder
+        uploaded_images = os.listdir(IMAGE_SAVE_PATH)
+        
+        if uploaded_images:
+            # Display the images
+            for img_file in uploaded_images:
+                img_path = os.path.join(IMAGE_SAVE_PATH, img_file)
+                img = Image.open(img_path)
+                st.image(img, caption=f"Uploaded Image: {img_file}", use_column_width=True)
         else:
             st.write("No image uploaded.")
     
