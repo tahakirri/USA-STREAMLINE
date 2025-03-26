@@ -849,7 +849,7 @@ else:
                     <p><strong>Uploaded by:</strong> {uploader}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                st.image(image, use_column_width=True)
+                st.image(image, use_container_width=True)
             except:
                 st.error(f"Error displaying image {img_id}")
 
