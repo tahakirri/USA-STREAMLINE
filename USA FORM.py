@@ -6,7 +6,6 @@ import os
 import re
 from PIL import Image
 import io
-import plotly.express as px
 import pandas as pd
 
 # --------------------------
@@ -682,57 +681,37 @@ else:
 
     # Dashboard Section
     elif st.session_state.current_section == "dashboard":
-        st.subheader("📊 Request Completion Dashboard")
-        
-        # Get all requests
-        all_requests = get_requests()
-        total_requests = len(all_requests)
-        completed_requests = sum(1 for r in all_requests if r[6])
-        completion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
-        
-        # Metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Total Requests</h3>
-                <h1>{total_requests}</h1>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Completed</h3>
-                <h1 style="color:#4CAF50;">{completed_requests}</h1>
-            </div>
-            """, unsafe_allow_html=True)
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Completion Rate</h3>
-                <h1>{completion_rate:.1f}%</h1>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Visualization
-        st.subheader("Request Trends")
-        
-        # Create dataframe for visualization
-        df = pd.DataFrame({
-            'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
-            'Status': ['Completed' if r[6] else 'Pending' for r in all_requests],
-            'Type': [r[2] for r in all_requests]
-        })
-        
-        # Daily request volume
-        fig1 = px.histogram(df, x='Date', color='Status', 
-                           title="Daily Request Volume by Status",
-                           barmode='group')
-        st.plotly_chart(fig1, use_container_width=True)
-        
-        # Request type distribution
-        fig2 = px.pie(df, names='Type', title="Request Type Distribution")
-        st.plotly_chart(fig2, use_container_width=True)
+    st.subheader("📊 Request Completion Dashboard")
+    
+    all_requests = get_requests()
+    total_requests = len(all_requests)
+    completed_requests = sum(1 for r in all_requests if r[6])
+    completion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Requests", total_requests)
+    with col2:
+        st.metric("Completed", completed_requests)
+    with col3:
+        st.metric("Completion Rate", f"{completion_rate:.1f}%")
+    
+    st.subheader("Request Trends")
+    
+    df = pd.DataFrame({
+        'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
+        'Status': ['Completed' if r[6] else 'Pending' for r in all_requests],
+        'Type': [r[2] for r in all_requests]
+    })
+    
+    st.write("### Daily Request Volume")
+    st.bar_chart(df['Date'].value_counts())
+    
+    st.write("### Request Type Distribution")
+    type_counts = df['Type'].value_counts().reset_index()
+    type_counts.columns = ['Type', 'Count']
+    st.bar_chart(type_counts.set_index('Type'))
+
 
     # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
