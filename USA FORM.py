@@ -725,5 +725,5 @@ else:
                 st.success("All HOLD images cleared!")
 
 # Run the app
-if _name_ == "_main_":
+if __name__ == "__main__":
     st.write("Request Management System")
