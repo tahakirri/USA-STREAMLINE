@@ -718,7 +718,7 @@ else:
         else:
             st.info("No mistakes reported.")
 
-    # Group Chat Section
+      # Group Chat Section
     elif st.session_state.current_section == "chat":
         st.subheader("Group Chat")
         
@@ -726,7 +726,7 @@ else:
         messages = get_group_messages()
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
-           is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
             
             st.markdown(f"""
             <div class="message {'sent' if sender == st.session_state.username else 'received'}" 
