@@ -1121,19 +1121,14 @@ def admin_section():
         st.write(f"Current Status: {status}")
         
         col1, col2 = st.columns(2)
-        if current:
-            if col1.button("Deactivate Killswitch"):
-                if toggle_killswitch(False):
-                    st.success("Killswitch deactivated!")
-                    st.rerun()
-            # Killswitch active display
-            st.markdown('''
-                <div class="killswitch-active">
-                    <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-                    <p>The system is currently in read-only mode.</p>
-                </div>
-                ''',
-                unsafe_allow_html=True
+       if current:
+        st.markdown('''  # <- Start with single quotes
+            <div class="killswitch-active">
+                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+                <p>The system is currently in read-only mode.</p>
+            </div>
+            ''',  # <- Close with matching single quotes
+            unsafe_allow_html=True
             )
         else:
             if col1.button("Activate Killswitch"):
