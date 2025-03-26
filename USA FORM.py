@@ -637,7 +637,6 @@ else:
         with st.expander("❌ Clear All Requests"):
             with st.form("clear_requests_form"):
                 st.warning("This will permanently delete ALL requests!")
-                    if confirm == "DELETE REQUESTS":
                         if clear_all_requests():
                             st.success("All requests deleted!")
                             st.rerun()
