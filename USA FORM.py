@@ -1,19 +1,3 @@
-import streamlit as st
-import sqlite3
-import hashlib
-from datetime import datetime
-import os
-import re
-from PIL import Image
-import io
-
-# Initialize session state variables if they don't exist
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.username = None
-    st.session_state.role = None
-    st.session_state.current_section = 'requests'
-
 def is_fancy_number(phone_number):
     """
     Determine if a phone number is 'fancy' based on various patterns
@@ -34,154 +18,55 @@ def is_fancy_number(phone_number):
             "reason": "Invalid phone number length"
         }
     
-    # Fancy patterns to check
+    # More strict fancy patterns to check
     fancy_patterns = [
-        # Repeating digits
-        (r'(\d)\1{2,}', "Has repeating digits"),
+        # Strict repeating digits - at least 4 consecutive identical digits
+        (r'(\d)\1{3,}', "Has four or more consecutive repeating digits"),
         
-        # Ascending or descending sequences
-        (r'012|123|234|345|456|567|678|789', "Contains ascending sequence"),
-        (r'987|876|765|654|543|432|321|210', "Contains descending sequence"),
+        # Very specific ascending or descending sequences across the number
+        (r'01234|12345|23456|34567|45678|56789', "Contains perfect ascending sequence"),
+        (r'98765|87654|76543|65432|54321|43210', "Contains perfect descending sequence"),
         
-        # Palindrome numbers
-        (lambda x: x == x[::-1], "Is a palindrome"),
+        # True palindromes (using full number)
+        (lambda x: x == x[::-1] and len(x) >= 10, "Is a full palindrome number"),
         
-        # Sequential patterns
-        (r'(01|12|23|34|45|56|67|78|89)', "Contains sequential digits"),
+        # Rare sequential patterns
+        (r'101010|123123|234234', "Contains rare repeating sequential pattern"),
         
-        # Mirror numbers
-        (lambda x: len(set(x)) <= 2, "Consists of minimal unique digits"),
+        # Super minimal unique digits
+        (lambda x: len(set(x)) <= 1, "Consists of single unique digit"),
         
-        # Special number patterns
-        (r'8888|6666|9999', "Contains lucky/symbolic numbers"),
+        # Extremely lucky/symbolic numbers
+        (r'888888|666666|999999', "Contains extremely lucky/symbolic number"),
     ]
+    
+    # Counter to track how many patterns match
+    pattern_matches = 0
+    matched_reasons = []
     
     for pattern in fancy_patterns:
         # Handle both regex and lambda pattern checks
-        if isinstance(pattern[0], str):
-            if re.search(pattern[0], digits):
-                return {
-                    "is_fancy": True,
-                    "reason": pattern[1]
-                }
-        elif callable(pattern[0]):
-            try:
+        try:
+            if isinstance(pattern[0], str):
+                match = re.search(pattern[0], digits)
+                if match:
+                    pattern_matches += 1
+                    matched_reasons.append(pattern[1])
+            elif callable(pattern[0]):
                 if pattern[0](digits):
-                    return {
-                        "is_fancy": True,
-                        "reason": pattern[1]
-                    }
-            except:
-                pass
+                    pattern_matches += 1
+                    matched_reasons.append(pattern[1])
+        except:
+            pass
+    
+    # Only consider very fancy if multiple patterns match
+    if pattern_matches >= 2:
+        return {
+            "is_fancy": True,
+            "reason": " and ".join(matched_reasons)
+        }
     
     return {
         "is_fancy": False,
         "reason": "Standard phone number"
     }
-
-def login_page():
-    """Login page for authentication"""
-    st.title("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    
-    if st.button("Login"):
-        # Add your authentication logic here
-        # For now, a dummy authentication
-        if username and password:
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.session_state.role = "admin" if username == "admin" else "user"
-            st.rerun()
-        else:
-            st.error("Invalid credentials")
-
-def main_app():
-    """Main application for authenticated users"""
-    # Sidebar Navigation
-    with st.sidebar:
-        st.title(f"👋 Welcome, {st.session_state.username}")
-        st.markdown("---")
-        
-        nav_options = [
-            ("📋 Requests", "requests"),
-            ("📱 Fancy Number", "fancy_number"),
-        ]
-        
-        if st.session_state.role == "admin":
-            nav_options.append(("⚙️ Admin Panel", "admin"))
-        
-        for option, value in nav_options:
-            if st.button(option, key=f"nav_{value}"):
-                st.session_state.current_section = value
-        
-        st.markdown("---")
-        if st.button("🚪 Logout"):
-            st.session_state.authenticated = False
-            st.session_state.role = None
-            st.session_state.username = None
-            st.rerun()
-    
-    # Main Content
-    st.title(f"{'📋' if st.session_state.current_section == 'requests' else '📱' if st.session_state.current_section == 'fancy_number' else '⚙️'} {st.session_state.current_section.title()}")
-
-    # Fancy Number Section
-    if st.session_state.current_section == "fancy_number":
-        st.subheader("📱 Fancy Number Checker")
-        
-        st.markdown("""
-        ### Discover if Your Phone Number is Fancy! 🌟
-        
-        What makes a phone number "fancy"?
-        - Repeating digits (like 8888)
-        - Ascending or descending sequences
-        - Palindrome numbers
-        - Sequential patterns
-        - Minimal unique digits
-        - Lucky/symbolic number combinations
-        """)
-        
-        with st.form("fancy_number_form"):
-            phone_number = st.text_input("Enter Full Phone Number", 
-                                         placeholder="e.g., +1 (555) 123-4567")
-            
-            if st.form_submit_button("Check If Fancy"):
-                if phone_number:
-                    result = is_fancy_number(phone_number)
-                    
-                    if result['is_fancy']:
-                        st.success(f"🌟 Fancy Number Detected! {result['reason']}")
-                        st.balloons()
-                        
-                        # Additional fancy details
-                        st.markdown("""
-                        ### 🎉 Congratulations! 
-                        Your phone number has a special characteristic that makes it stand out!
-                        
-                        #### What does this mean?
-                        - Your number is unique
-                        - It has an interesting mathematical or visual pattern
-                        - It could be considered lucky or memorable
-                        """)
-                    else:
-                        st.info(f"📞 {result['reason']}")
-                        
-                        # Consolation for non-fancy numbers
-                        st.markdown("""
-                        ### 💡 Tip
-                        While your number isn't considered "fancy" right now, 
-                        you can always look for interesting patterns when choosing future numbers!
-                        """)
-                else:
-                    st.warning("Please enter a complete phone number")
-
-def app():
-    """Main application flow"""
-    if not st.session_state.authenticated:
-        login_page()
-    else:
-        main_app()
-
-# Run the application
-if __name__ == "__main__":
-    app()
