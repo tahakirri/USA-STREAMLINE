@@ -500,7 +500,7 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #212529; }
     [data-testid="stSidebar"] { 
         background-color: #ffffff; 
         border-right: 1px solid #e9ecef; 
