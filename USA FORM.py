@@ -105,7 +105,12 @@ def init_db():
         """)
         
         # Default admin accounts
-         cursor.execute("""
+        cursor.execute("""
+            INSERT OR IGNORE INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, ("admin", hash_password("admin123"), "admin"))
+        
+        cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
