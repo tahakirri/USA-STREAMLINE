@@ -742,5 +742,5 @@ else:
         else:
             st.info("No images in HOLD")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     st.write("Request Management System")
