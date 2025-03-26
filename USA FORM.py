@@ -6,6 +6,8 @@ import os
 import re
 from PIL import Image
 import io
+import plotly.express as px
+import pandas as pd
 
 # --------------------------
 # Database Functions
@@ -15,29 +17,23 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate(username, password):
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         hashed_password = hash_password(password)
         cursor.execute("SELECT role FROM users WHERE username = ? AND password = ?", (username, hashed_password))
         result = cursor.fetchone()
         return result[0] if result else None
-    except sqlite3.Error as e:
-        st.error(f"Authentication error: {e}")
-        return None
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def init_db():
-    conn = None
+    os.makedirs("data", exist_ok=True)
+    conn = sqlite3.connect("data/requests.db")
     try:
-        os.makedirs("data", exist_ok=True)
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         
-        # Users table (fixed syntax)
+        # Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,100 +102,42 @@ def init_db():
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
-        def get_daily_request_stats():
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT DATE(timestamp) as date,
-                   COUNT(*) as total,
-                   SUM(completed) as completed
-            FROM requests
-            GROUP BY DATE(timestamp)
-            ORDER BY DATE(timestamp) DESC
-            LIMIT 7
-        """)
-        return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Error getting stats: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
+        
         conn.commit()
-    except sqlite3.Error as e:
-        st.error(f"Database error: {e}")
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def is_killswitch_enabled():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        
-        # Create table if not exists
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY DEFAULT 1,
-                killswitch_enabled INTEGER DEFAULT 0)
-        """)
-        
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
         result = cursor.fetchone()
         return bool(result[0]) if result else False
-    except sqlite3.Error as e:
-        st.error(f"Error checking killswitch: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def toggle_killswitch(enable):
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        
-        # Create table if not exists
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY DEFAULT 1,
-                killswitch_enabled INTEGER DEFAULT 0)
-        """)
-        
-        # Ensure default record exists
-        cursor.execute("""
-            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
-            VALUES (1, 0)
-        """)
-        
-        # Update the setting
         cursor.execute("""
             UPDATE system_settings 
             SET killswitch_enabled = ?
             WHERE id = 1
         """, (1 if enable else 0,))
-        
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Error toggling killswitch: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def add_request(agent_name, request_type, identifier, comment):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
@@ -207,38 +145,42 @@ def add_request(agent_name, request_type, identifier, comment):
         """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add request: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_requests():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        cursor.execute("SELECT * FROM requests ORDER BY timestamp DESC")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def search_requests(query):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        query = f"%{query.lower()}%"
         cursor.execute("""
             SELECT * FROM requests 
+            WHERE LOWER(agent_name) LIKE ? 
+            OR LOWER(request_type) LIKE ? 
+            OR LOWER(identifier) LIKE ? 
+            OR LOWER(comment) LIKE ?
             ORDER BY timestamp DESC
-        """)
+        """, (query, query, query, query))
         return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch requests: {e}")
-        return []
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def update_request_status(request_id, completed):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE requests 
@@ -247,21 +189,16 @@ def update_request_status(request_id, completed):
         """, (1 if completed else 0, request_id))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to update request status: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def add_mistake(team_leader, agent_name, ticket_id, error_description):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
@@ -269,95 +206,77 @@ def add_mistake(team_leader, agent_name, ticket_id, error_description):
         """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add mistake: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_mistakes():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        cursor.execute("SELECT * FROM mistakes ORDER BY timestamp DESC")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def search_mistakes(query):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        query = f"%{query.lower()}%"
         cursor.execute("""
             SELECT * FROM mistakes 
+            WHERE LOWER(agent_name) LIKE ? 
+            OR LOWER(ticket_id) LIKE ? 
+            OR LOWER(error_description) LIKE ?
             ORDER BY timestamp DESC
-        """)
+        """, (query, query, query))
         return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch mistakes: {e}")
-        return []
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def send_group_message(sender, message):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        
         mentions = re.findall(r'@(\w+)', message)
-        
         cursor.execute("""
             INSERT INTO group_messages (sender, message, timestamp, mentions) 
             VALUES (?, ?, ?, ?)
         """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to send message: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_group_messages():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM group_messages 
-            ORDER BY timestamp DESC
-            LIMIT 50
-        """)
+        cursor.execute("SELECT * FROM group_messages ORDER BY timestamp DESC LIMIT 50")
         return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch group messages: {e}")
-        return []
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_all_users():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("SELECT id, username, role FROM users")
         return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch users: {e}")
-        return []
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def add_user(username, password, role):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO users (username, password, role) 
@@ -365,40 +284,30 @@ def add_user(username, password, role):
         """, (username, hash_password(password), role))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add user: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def delete_user(user_id):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to delete user: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def add_hold_image(uploader, image_data):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO hold_images (uploader, image_data, timestamp) 
@@ -406,108 +315,76 @@ def add_hold_image(uploader, image_data):
         """, (uploader, image_data, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add HOLD image: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def get_hold_images():
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM hold_images 
-            ORDER BY timestamp DESC
-        """)
+        cursor.execute("SELECT * FROM hold_images ORDER BY timestamp DESC")
         return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch HOLD images: {e}")
-        return []
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def clear_hold_images():
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("DELETE FROM hold_images")
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear HOLD images: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def clear_all_requests():
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("DELETE FROM requests")
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear requests: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def clear_all_mistakes():
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("DELETE FROM mistakes")
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear mistakes: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 def clear_all_group_messages():
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = None
+    conn = sqlite3.connect("data/requests.db")
     try:
-        conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("DELETE FROM group_messages")
         conn.commit()
         return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear group messages: {e}")
-        return False
     finally:
-        if conn:
-            conn.close()
+        conn.close()
 
 # --------------------------
-# Streamlit App Configuration
+# Streamlit App
 # --------------------------
 
 st.set_page_config(
@@ -579,6 +456,21 @@ st.markdown("""
         margin-bottom: 1rem;
     }
 
+    .metric-card {
+        background-color: #1F2937;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+
+    .search-box {
+        margin-bottom: 20px;
+        background-color: #1F2937;
+        padding: 15px;
+        border-radius: 10px;
+    }
+
     /* Scrollbar customization */
     ::-webkit-scrollbar {
         width: 8px;
@@ -595,16 +487,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-# Initialize session state
+# Session State
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.role = None
     st.session_state.username = None
     st.session_state.current_section = "requests"
+    st.session_state.last_request_count = 0
+    st.session_state.last_mistake_count = 0
     st.session_state.last_message_count = 0
+    st.session_state.last_message_ids = []
 
-# Initialize database
+# Initialize DB
 init_db()
 
 # Login Page
@@ -627,6 +521,9 @@ if not st.session_state.authenticated:
                             st.session_state.authenticated = True
                             st.session_state.role = role
                             st.session_state.username = username
+                            st.session_state.last_request_count = len(get_requests())
+                            st.session_state.last_mistake_count = len(get_mistakes())
+                            st.session_state.last_message_ids = [msg[0] for msg in get_group_messages()]
                             st.rerun()
                         else:
                             st.error("Invalid credentials")
@@ -644,6 +541,38 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
+    # Notification System
+    def show_notifications():
+        current_requests = get_requests()
+        current_mistakes = get_mistakes()
+        current_messages = get_group_messages()
+        
+        # Request notifications
+        new_requests = len(current_requests) - st.session_state.last_request_count
+        if new_requests > 0 and st.session_state.last_request_count > 0:
+            st.toast(f"📋 {new_requests} new request(s) submitted!", icon="📋")
+        st.session_state.last_request_count = len(current_requests)
+        
+        # Mistake notifications
+        new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
+        if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
+            st.toast(f"❌ {new_mistakes} new mistake(s) reported!", icon="❌")
+        st.session_state.last_mistake_count = len(current_mistakes)
+        
+        # Message notifications
+        current_message_ids = [msg[0] for msg in current_messages]
+        new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
+        for msg in new_messages:
+            if msg[1] != st.session_state.username:
+                mentions = msg[4].split(',') if msg[4] else []
+                if st.session_state.username in mentions:
+                    st.toast(f"💬 You were mentioned by {msg[1]}!", icon="💬")
+                else:
+                    st.toast(f"💬 New message from {msg[1]}!", icon="💬")
+        st.session_state.last_message_ids = current_message_ids
+
+    show_notifications()
+
     # Sidebar Navigation
     with st.sidebar:
         st.title(f"👋 Welcome, {st.session_state.username}")
@@ -651,10 +580,10 @@ else:
         
         nav_options = [
             ("📋 Requests", "requests"),
+            ("📊 Dashboard", "dashboard"),
             ("🖼️ HOLD", "hold"),
             ("❌ Ticket Mistakes", "mistakes"),
             ("💬 Group Chat", "chat")
-            (("📊 Dashboard", "dashboard"))
         ]
         
         if st.session_state.role == "admin":
@@ -665,6 +594,23 @@ else:
                 st.session_state.current_section = value
         
         st.markdown("---")
+        
+        # Notification Badges
+        pending_requests = len([r for r in get_requests() if not r[6]])
+        new_mistakes = len(get_mistakes())
+        unread_messages = len([m for m in get_group_messages() 
+                             if m[0] not in st.session_state.last_message_ids 
+                             and m[1] != st.session_state.username])
+        
+        st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h4>🔔 Notifications</h4>
+            <p>📋 Pending requests: {pending_requests}</p>
+            <p>❌ Recent mistakes: {new_mistakes}</p>
+            <p>💬 Unread messages: {unread_messages}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.session_state.role = None
@@ -673,22 +619,21 @@ else:
     
     # Main Content
     st.title(f"{'📋' if st.session_state.current_section == 'requests' else ''}"
+             f"{'📊' if st.session_state.current_section == 'dashboard' else ''}"
              f"{'🖼️' if st.session_state.current_section == 'hold' else ''}"
              f"{'❌' if st.session_state.current_section == 'mistakes' else ''}"
              f"{'💬' if st.session_state.current_section == 'chat' else ''}"
              f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
-             elif st.session_state.current_section == "dashboard":
-    st.subheader("System Overview")
              f" {st.session_state.current_section.title()}")
 
     # Requests Section
     if st.session_state.current_section == "requests":
         if not is_killswitch_enabled():
-            with st.container():
-                st.subheader("Submit a Request")
+            with st.expander("➕ Submit New Request", expanded=False):
                 with st.form("request_form"):
-                    request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
-                    identifier = st.text_input("Identifier")
+                    cols = st.columns([1, 3])
+                    request_type = cols[0].selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
+                    identifier = cols[1].text_input("Identifier")
                     comment = st.text_area("Comment")
                     
                     if st.form_submit_button("Submit Request"):
@@ -698,8 +643,11 @@ else:
         else:
             st.warning("⚠️ System is currently locked. You cannot submit new requests.")
         
+        st.subheader("🔍 Search Requests")
+        search_query = st.text_input("Search by agent, identifier, or comment", key="request_search")
+        requests = search_requests(search_query) if search_query else get_requests()
+        
         st.subheader("All Requests")
-        requests = get_requests()
         for req in requests:
             req_id, agent, req_type, identifier, comment, timestamp, completed = req
             
@@ -732,29 +680,82 @@ else:
                     </div>
                     """, unsafe_allow_html=True)
 
-    #  # Ticket Mistakes Section
+    # Dashboard Section
+    elif st.session_state.current_section == "dashboard":
+        st.subheader("📊 Request Completion Dashboard")
+        
+        # Get all requests
+        all_requests = get_requests()
+        total_requests = len(all_requests)
+        completed_requests = sum(1 for r in all_requests if r[6])
+        completion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
+        
+        # Metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Total Requests</h3>
+                <h1>{total_requests}</h1>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Completed</h3>
+                <h1 style="color:#4CAF50;">{completed_requests}</h1>
+            </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>Completion Rate</h3>
+                <h1>{completion_rate:.1f}%</h1>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Visualization
+        st.subheader("Request Trends")
+        
+        # Create dataframe for visualization
+        df = pd.DataFrame({
+            'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
+            'Status': ['Completed' if r[6] else 'Pending' for r in all_requests],
+            'Type': [r[2] for r in all_requests]
+        })
+        
+        # Daily request volume
+        fig1 = px.histogram(df, x='Date', color='Status', 
+                           title="Daily Request Volume by Status",
+                           barmode='group')
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        # Request type distribution
+        fig2 = px.pie(df, names='Type', title="Request Type Distribution")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
-        # Show report form only to admins
-        if st.session_state.role == "admin":
-            if not is_killswitch_enabled():
-                st.subheader("Report a Ticket Mistake")
+        if not is_killswitch_enabled():
+            with st.expander("➕ Report New Mistake", expanded=False):
                 with st.form("mistake_form"):
-                    ticket_id = st.text_input("Ticket ID")
-                    agent_name = st.text_input("Agent Name")
+                    cols = st.columns(3)
+                    agent_name = cols[0].text_input("Agent Name")
+                    ticket_id = cols[1].text_input("Ticket ID")
                     error_description = st.text_area("Error Description")
                     
                     if st.form_submit_button("Report Mistake"):
                         if ticket_id and agent_name and error_description:
                             if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
                                 st.success("Mistake reported successfully!")
-            else:
-                st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
         else:
-            st.info("🔒 Only administrators can report ticket mistakes")
+            st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
         
-        # Show mistakes log to all users
+        st.subheader("🔍 Search Mistakes")
+        search_query = st.text_input("Search by agent, ticket ID, or error", key="mistake_search")
+        mistakes = search_mistakes(search_query) if search_query else get_mistakes()
+        
         st.subheader("Ticket Mistakes Log")
-        mistakes = get_mistakes()
         if mistakes:
             for mistake in mistakes:
                 mistake_id, team_leader, agent_name, ticket_id, error_desc, timestamp = mistake
@@ -773,7 +774,7 @@ else:
         else:
             st.info("No mistakes reported.")
 
-      # Group Chat Section
+    # Group Chat Section
     elif st.session_state.current_section == "chat":
         st.subheader("Group Chat")
         
@@ -865,8 +866,6 @@ else:
         st.markdown("---")
         st.subheader("🗑️ Data Management")
         
-        # Requests Clearing
-        st.markdown("#### Clear Requests")
         col1, col2 = st.columns(2)
         with col1:
             if not is_killswitch_enabled():
@@ -877,10 +876,7 @@ else:
             else:
                 st.button("🗑️ Clear All Requests", key="clear_requests", disabled=True)
         
-        # Mistakes Clearing
-        st.markdown("#### Clear Mistakes")
-        col1, col2 = st.columns(2)
-        with col1:
+        with col2:
             if not is_killswitch_enabled():
                 if st.button("🗑️ Clear All Mistakes", key="clear_mistakes"):
                     if clear_all_mistakes():
@@ -889,8 +885,6 @@ else:
             else:
                 st.button("🗑️ Clear All Mistakes", key="clear_mistakes", disabled=True)
         
-        # Group Messages Clearing
-        st.markdown("#### Clear Group Messages")
         col1, col2 = st.columns(2)
         with col1:
             if not is_killswitch_enabled():
@@ -901,10 +895,7 @@ else:
             else:
                 st.button("🗑️ Clear All Group Messages", key="clear_group_messages", disabled=True)
         
-        # HOLD Images Clearing
-        st.markdown("#### Clear HOLD Images")
-        col1, col2 = st.columns(2)
-        with col1:
+        with col2:
             if not is_killswitch_enabled():
                 if st.button("🗑️ Clear All HOLD Images", key="clear_hold_images"):
                     if clear_hold_images():
@@ -918,8 +909,7 @@ else:
         # Admin-only upload section
         if st.session_state.role == "admin":
             if not is_killswitch_enabled():
-                with st.container():
-                    st.subheader("Upload Image to HOLD")
+                with st.expander("📤 Upload Image to HOLD", expanded=False):
                     uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
                     
                     if uploaded_image:
@@ -933,7 +923,7 @@ else:
             st.info("🔒 Only administrators can upload images to HOLD")
 
         # Display section (visible to all)
-        st.subheader("Check HOLD Images")
+        st.subheader("📥 Check HOLD Images")
         hold_images = get_hold_images()
         
         if hold_images:
@@ -952,121 +942,7 @@ else:
                     st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
         else:
             st.info("No images in HOLD")
-def search_requests(query):
-    conn = sqlite3.connect("data/requests.db")
-    try:
-        cursor = conn.cursor()
-        query = f"%{query.lower()}%"
-        cursor.execute("""
-            SELECT * FROM requests 
-            WHERE LOWER(agent_name) LIKE ? 
-            OR LOWER(request_type) LIKE ? 
-            OR LOWER(identifier) LIKE ? 
-            OR LOWER(comment) LIKE ?
-            ORDER BY timestamp DESC
-        """, (query, query, query, query))
-        return cursor.fetchall()
-    finally:
-        conn.close()
-def search_mistakes(query):
-    conn = sqlite3.connect("data/requests.db")
-    try:
-        cursor = conn.cursor()
-        query = f"%{query.lower()}%"
-        cursor.execute("""
-            SELECT * FROM mistakes 
-            WHERE LOWER(agent_name) LIKE ? 
-            OR LOWER(ticket_id) LIKE ? 
-            OR LOWER(error_description) LIKE ?
-            ORDER BY timestamp DESC
-        """, (query, query, query))
-        return cursor.fetchall()
-    finally:
-        conn.close()
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.role = None
-    st.session_state.username = None
-    st.session_state.current_section = "requests"
-    st.session_state.last_request_count = 0
-    st.session_state.last_mistake_count = 0
-    st.session_state.last_message_count = 0
-    st.session_state.last_message_ids = []
- def show_notifications():
-        current_requests = get_requests()
-        current_mistakes = get_mistakes()
-        current_messages = get_group_messages()
-        
-        # Request notifications
-        new_requests = len(current_requests) - st.session_state.last_request_count
-        if new_requests > 0 and st.session_state.last_request_count > 0:
-            st.toast(f"📋 {new_requests} new request(s) submitted!", icon="📋")
-        st.session_state.last_request_count = len(current_requests)
-        
-        # Mistake notifications
-        new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
-        if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
-            st.toast(f"❌ {new_mistakes} new mistake(s) reported!", icon="❌")
-        st.session_state.last_mistake_count = len(current_mistakes)
-        
-        # Message notifications
-        current_message_ids = [msg[0] for msg in current_messages]
-        new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
-        for msg in new_messages:
-            if msg[1] != st.session_state.username:
-                mentions = msg[4].split(',') if msg[4] else []
-                if st.session_state.username in mentions:
-                    st.toast(f"💬 You were mentioned by {msg[1]}!", icon="💬")
-                else:
-                    st.toast(f"💬 New message from {msg[1]}!", icon="💬")
-        st.session_state.last_message_ids = current_message_ids
 
-    show_notifications()
-  pending_requests = len([r for r in get_requests() if not r[6]])
-        new_mistakes = len(get_mistakes())
-        unread_messages = len([m for m in get_group_messages() 
-                             if m[0] not in st.session_state.last_message_ids 
-                             and m[1] != st.session_state.username])
-        
-        st.markdown(f"""
-        <div style="margin-bottom: 20px;">
-            <h4>🔔 Notifications</h4>
-            <p>📋 Pending requests: {pending_requests}</p>
-            <p>❌ Recent mistakes: {new_mistakes}</p>
-            <p>💬 Unread messages: {unread_messages}</p>
-        </div>
-        """, unsafe_allow_html=True)
- st.subheader("📊 Request Dashboard")
-        col1, col2, col3, col4 = st.columns(4)
-        total_requests = len(requests)
-        completed = sum(1 for r in requests if r[6])
-        
-        with col1:
-            st.markdown('<div class="metric-card"><h3>Total</h3><h1>{}</h1></div>'.format(total_requests), unsafe_allow_html=True)
-        with col2:
-            st.markdown('<div class="metric-card"><h3>Completed</h3><h1 style="color:#4CAF50;">{}</h1></div>'.format(completed), unsafe_allow_html=True)
-        with col3:
-            st.markdown('<div class="metric-card"><h3>Pending</h3><h1 style="color:#F44336;">{}</h1></div>'.format(total_requests - completed), unsafe_allow_html=True)
-        with col4:
-            st.markdown('<div class="metric-card"><h3>Completion</h3><h1>{}%</h1></div>'.format(
-                round((completed/total_requests)*100) if total_requests > 0 else 0), unsafe_allow_html=True)
-        
-        # Visualization
-        df = pd.DataFrame({
-            'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in requests],
-            'Status': ['Completed' if r[6] else 'Pending' for r in requests]
-        })
-        fig = px.histogram(df, x='Date', color='Status', barmode='group')
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Request List
-        st.subheader("All Requests")
-        for req in requests:
-            # ... (Keep existing request display code) ...
-
-    elif st.session_state.current_section == "mistakes":
-        st.title("❌ Ticket Mistakes")
-        
 # Run the app
 if __name__ == "__main__":
     st.write("Request Management System")
