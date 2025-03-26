@@ -508,10 +508,10 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     [data-testid="stSidebar"] { 
         background-color: #ffffff; 
-        border-right: 1px solid #e9ecef; 
+        border-right: 1px solid #8860D0; 
     }
     .stButton>button {
-        background-color: #3b52f6;
+        background-color: #FF8E8E;
         color: white;
         border-radius: 8px;
         padding: 0.5rem 1rem;
