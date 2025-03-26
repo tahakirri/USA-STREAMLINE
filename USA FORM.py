@@ -106,7 +106,27 @@ def init_db():
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
-        
+        def get_daily_request_stats():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DATE(timestamp) as date,
+                   COUNT(*) as total,
+                   SUM(completed) as completed
+            FROM requests
+            GROUP BY DATE(timestamp)
+            ORDER BY DATE(timestamp) DESC
+            LIMIT 7
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Error getting stats: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
         conn.commit()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -634,6 +654,7 @@ else:
             ("🖼️ HOLD", "hold"),
             ("❌ Ticket Mistakes", "mistakes"),
             ("💬 Group Chat", "chat")
+            (("📊 Dashboard", "dashboard"))
         ]
         
         if st.session_state.role == "admin":
@@ -656,6 +677,8 @@ else:
              f"{'❌' if st.session_state.current_section == 'mistakes' else ''}"
              f"{'💬' if st.session_state.current_section == 'chat' else ''}"
              f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
+             elif st.session_state.current_section == "dashboard":
+    st.subheader("System Overview")
              f" {st.session_state.current_section.title()}")
 
     # Requests Section
