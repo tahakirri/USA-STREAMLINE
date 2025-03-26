@@ -680,37 +680,48 @@ else:
                     """, unsafe_allow_html=True)
 
     # Dashboard Section
-    elif st.session_state.current_section == "dashboard":
+   elif st.session_state.current_section == "dashboard":
     st.subheader("📊 Request Completion Dashboard")
     
+    # Get all requests
     all_requests = get_requests()
     total_requests = len(all_requests)
     completed_requests = sum(1 for r in all_requests if r[6])
     completion_rate = (completed_requests / total_requests * 100) if total_requests > 0 else 0
     
+    # Metrics - using Streamlit's native metrics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Requests", total_requests)
     with col2:
-        st.metric("Completed", completed_requests)
+        st.metric("Completed", completed_requests, delta=f"{completed_requests - (total_requests - completed_requests)}")
     with col3:
         st.metric("Completion Rate", f"{completion_rate:.1f}%")
     
+    # Visualization Section
     st.subheader("Request Trends")
     
+    # Create dataframe for visualization
     df = pd.DataFrame({
         'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
         'Status': ['Completed' if r[6] else 'Pending' for r in all_requests],
         'Type': [r[2] for r in all_requests]
     })
     
+    # Daily request volume
     st.write("### Daily Request Volume")
-    st.bar_chart(df['Date'].value_counts())
+    daily_counts = df['Date'].value_counts().sort_index()
+    st.bar_chart(daily_counts)
     
+    # Status distribution
+    st.write("### Request Status")
+    status_counts = df['Status'].value_counts()
+    st.bar_chart(status_counts)
+    
+    # Request type distribution
     st.write("### Request Type Distribution")
-    type_counts = df['Type'].value_counts().reset_index()
-    type_counts.columns = ['Type', 'Count']
-    st.bar_chart(type_counts.set_index('Type'))
+    type_counts = df['Type'].value_counts()
+    st.bar_chart(type_counts)
 
 
     # Ticket Mistakes Section
