@@ -19,21 +19,10 @@ def authenticate(username, password):
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        
-        # Hash the provided password
         hashed_password = hash_password(password)
-        
-        # Check credentials against users table
-        cursor.execute("""
-            SELECT role FROM users 
-            WHERE username = ? AND password = ?
-        """, (username, hashed_password))
-        
+        cursor.execute("SELECT role FROM users WHERE username = ? AND password = ?", (username, hashed_password))
         result = cursor.fetchone()
-        
-        # Return role if credentials are valid, otherwise return None
         return result[0] if result else None
-    
     except sqlite3.Error as e:
         st.error(f"Authentication error: {e}")
         return None
@@ -54,7 +43,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin'))
+                role TEXT CHECK(role IN ('agent', 'admin')))
         """)
         
         # Requests table
@@ -99,14 +88,14 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        # System settings table - THIS IS THE NEW TABLE WE NEED TO ADD
+        # System settings table for killswitch
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
         
-        # Insert default settings if they don't exist
+        # Initialize default settings
         cursor.execute("""
             INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
             VALUES (1, 0)
@@ -135,19 +124,6 @@ def is_killswitch_enabled():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        
-        # First check if the table exists
-        cursor.execute("""
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='system_settings'
-        """)
-        table_exists = cursor.fetchone()
-        
-        if not table_exists:
-            # If table doesn't exist, it means killswitch is not enabled
-            return False
-            
-        # Now check the killswitch status
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
         result = cursor.fetchone()
         return bool(result[0]) if result else False
@@ -177,206 +153,6 @@ def toggle_killswitch(enable):
         if conn:
             conn.close()
 
-# Mistakes Section Functions
-def add_mistake(team_leader, agent_name, ticket_id, error_description):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
-            VALUES (?, ?, ?, ?, ?)
-        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add mistake: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def get_mistakes():
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM mistakes 
-            ORDER BY timestamp DESC
-        """)
-        return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch mistakes: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-# Group Chat Functions
-def send_group_message(sender, message):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        
-        # Extract mentions
-        mentions = re.findall(r'@(\w+)', message)
-        
-        cursor.execute("""
-            INSERT INTO group_messages (sender, message, timestamp, mentions) 
-            VALUES (?, ?, ?, ?)
-        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to send message: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def get_group_messages():
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM group_messages 
-            ORDER BY timestamp DESC
-            LIMIT 50
-        """)
-        return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch group messages: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-# Admin Panel Functions
-def get_all_users():
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, role FROM users")
-        return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch users: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-def add_user(username, password, role):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO users (username, password, role) 
-            VALUES (?, ?, ?)
-        """, (username, hash_password(password), role))
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to add user: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def delete_user(user_id):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to delete user: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-# New functions for clearing data
-def clear_all_requests():
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM requests")
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear requests: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def clear_all_mistakes():
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM mistakes")
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear mistakes: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def clear_all_group_messages():
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM group_messages")
-        conn.commit()
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to clear group messages: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-# Request Functions
 def add_request(agent_name, request_type, identifier, comment):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
@@ -439,7 +215,143 @@ def update_request_status(request_id, completed):
         if conn:
             conn.close()
 
-# HOLD Functions
+def add_mistake(team_leader, agent_name, ticket_id, error_description):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add mistake: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch mistakes: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def send_group_message(sender, message):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        
+        mentions = re.findall(r'@(\w+)', message)
+        
+        cursor.execute("""
+            INSERT INTO group_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to send message: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch group messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_users():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, role FROM users")
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def add_user(username, password, role):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, (username, hash_password(password), role))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(user_id):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to delete user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def add_hold_image(uploader, image_data):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
@@ -498,7 +410,67 @@ def clear_hold_images():
         if conn:
             conn.close()
 
+def clear_all_requests():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM requests")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear requests: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_mistakes():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM mistakes")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear mistakes: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_group_messages():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM group_messages")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear group messages: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+# --------------------------
 # Streamlit App Configuration
+# --------------------------
+
 st.set_page_config(
     page_title="Request Management System", 
     page_icon=":office:",
@@ -546,6 +518,12 @@ st.markdown("""
         background-color: #ffebee;
         border-left: 5px solid #f44336;
         padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .killswitch-control {
+        background-color: #fff3e0;
+        padding: 1rem;
+        border-radius: 8px;
         margin-bottom: 1rem;
     }
 </style>
@@ -728,7 +706,7 @@ else:
         messages = get_group_messages()
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
-            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else []
             
             st.markdown(f"""
             <div class="message {'sent' if sender == st.session_state.username else 'received'}" 
