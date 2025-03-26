@@ -380,7 +380,7 @@ else:
         messages = get_group_messages()
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
-            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else False
+            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else False)
             
             st.markdown(f"""
             <div class='card' style='{"background: #E3F2FD; border-left: 4px solid #2196F3;" if is_mentioned else ""}'>
