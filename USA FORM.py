@@ -105,11 +105,6 @@ def init_db():
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
-        """, ("fouad fathi", hash_password("fathi@44"), "admin"))
-        
-        cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
-            VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
         
         conn.commit()
