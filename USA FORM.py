@@ -686,7 +686,7 @@ else:
                     st.rerun()
 
 # HOLD Section
-if st.session_state.current_section == "hold":  # Changed from `elif` to `if`
+if st.session_state.current_section == "hold":
     # Admin-only upload section
     if st.session_state.role == "admin":
         with st.container():
@@ -697,7 +697,7 @@ if st.session_state.current_section == "hold":  # Changed from `elif` to `if`
                 image_data = uploaded_image.read()
                 add_hold_image(st.session_state.username, image_data)
                 st.success("Image uploaded successfully!")
-                st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)  # Fixed here
     else:
         st.info("🔒 Only administrators can upload images to HOLD")
 
@@ -718,7 +718,7 @@ if st.session_state.current_section == "hold":  # Changed from `elif` to `if`
                     <p><strong>Uploaded by:</strong> {uploader}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_column_width=True)
+                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)  # Fixed here
 
     # Admin-only clear button
     if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
