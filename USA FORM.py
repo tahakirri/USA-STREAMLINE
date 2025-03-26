@@ -108,7 +108,7 @@ def init_db():
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
-        """, ("admin", hash_password("admin123"), "admin"))
+        """, ("fouad fathi", hash_password("fathi@44"), "admin"))
         
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
@@ -725,5 +725,5 @@ else:
                 st.success("All HOLD images cleared!")
 
 # Run the app
-if _name_ == "_main_":
+if __name__ == "__main__":
     st.write("Request Management System")
