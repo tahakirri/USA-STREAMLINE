@@ -1,12 +1,13 @@
 import streamlit as st
 import sqlite3
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import re
 from PIL import Image
 import io
 import pandas as pd
+import json
 
 # --------------------------
 # Database Functions
@@ -38,7 +39,9 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin')))
+                role TEXT CHECK(role IN ('agent', 'admin')),
+                team TEXT,
+                shift TEXT)
         """)
         
         cursor.execute("""
@@ -94,7 +97,11 @@ def init_db():
                 max_users INTEGER,
                 current_users INTEGER DEFAULT 0,
                 created_by TEXT,
-                timestamp TEXT)
+                timestamp TEXT,
+                shift TEXT,
+                team TEXT,
+                is_template INTEGER DEFAULT 0,
+                template_name TEXT)
         """)
         
         cursor.execute("""
@@ -108,11 +115,20 @@ def init_db():
                 FOREIGN KEY(break_id) REFERENCES breaks(id))
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS break_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT UNIQUE,
+                template_data TEXT,
+                created_by TEXT,
+                timestamp TEXT)
+        """)
+        
         cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
         cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
-            VALUES (?, ?, ?)
-        """, ("taha kirri", hash_password("arise@99"), "admin"))
+            INSERT OR IGNORE INTO users (username, password, role, team, shift) 
+            VALUES (?, ?, ?, ?, ?)
+        """, ("taha kirri", hash_password("arise@99"), "admin", "all", "all"))
         
         conn.commit()
     finally:
@@ -273,12 +289,12 @@ def get_all_users():
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, role FROM users")
+        cursor.execute("SELECT id, username, role, team, shift FROM users")
         return cursor.fetchall()
     finally:
         conn.close()
 
-def add_user(username, password, role):
+def add_user(username, password, role, team="all", shift="all"):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
@@ -286,8 +302,26 @@ def add_user(username, password, role):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                      (username, hash_password(password), role))
+        cursor.execute("INSERT INTO users (username, password, role, team, shift) VALUES (?, ?, ?, ?, ?)",
+                      (username, hash_password(password), role, team, shift))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def update_user(user_id, username, role, team, shift):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET username = ?, role = ?, team = ?, shift = ?
+            WHERE id = ?
+        """, (username, role, team, shift, user_id))
         conn.commit()
         return True
     finally:
@@ -389,7 +423,7 @@ def clear_all_group_messages():
     finally:
         conn.close()
 
-def add_break_slot(break_name, start_time, end_time, max_users, created_by):
+def add_break_slot(break_name, start_time, end_time, max_users, created_by, shift="all", team="all", is_template=False, template_name=None):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
@@ -398,29 +432,49 @@ def add_break_slot(break_name, start_time, end_time, max_users, created_by):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO breaks (break_name, start_time, end_time, max_users, created_by, timestamp) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (break_name, start_time, end_time, max_users, created_by,
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            INSERT INTO breaks (
+                break_name, start_time, end_time, max_users, created_by, timestamp,
+                shift, team, is_template, template_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            break_name, start_time, end_time, max_users, created_by,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            shift, team, 1 if is_template else 0, template_name
+        ))
         conn.commit()
         return True
     finally:
         conn.close()
 
-def get_all_break_slots():
+def get_all_break_slots(team=None, shift=None, is_template=False):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM breaks ORDER BY start_time")
+        
+        query = "SELECT * FROM breaks WHERE is_template = ?"
+        params = [1 if is_template else 0]
+        
+        if team and team != "all":
+            query += " AND (team = ? OR team = 'all')"
+            params.append(team)
+            
+        if shift and shift != "all":
+            query += " AND (shift = ? OR shift = 'all')"
+            params.append(shift)
+            
+        query += " ORDER BY start_time"
+        
+        cursor.execute(query, tuple(params))
         return cursor.fetchall()
     finally:
         conn.close()
 
-def get_available_break_slots(date):
+def get_available_break_slots(date, team=None, shift=None):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
-        cursor.execute("""
+        
+        query = """
             SELECT b.* 
             FROM breaks b
             WHERE b.max_users > (
@@ -429,8 +483,21 @@ def get_available_break_slots(date):
                 WHERE bb.break_id = b.id 
                 AND bb.booking_date = ?
             )
-            ORDER BY b.start_time
-        """, (date,))
+            AND b.is_template = 0
+        """
+        params = [date]
+        
+        if team and team != "all":
+            query += " AND (b.team = ? OR b.team = 'all')"
+            params.append(team)
+            
+        if shift and shift != "all":
+            query += " AND (b.shift = ? OR b.shift = 'all')"
+            params.append(shift)
+            
+        query += " ORDER BY b.start_time"
+        
+        cursor.execute(query, tuple(params))
         return cursor.fetchall()
     finally:
         conn.close()
@@ -472,7 +539,7 @@ def get_all_bookings(date):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT bb.*, b.break_name, b.start_time, b.end_time, u.role
+            SELECT bb.*, b.break_name, b.start_time, b.end_time, u.role, u.team, u.shift
             FROM break_bookings bb
             JOIN breaks b ON bb.break_id = b.id
             JOIN users u ON bb.user_id = u.id
@@ -512,6 +579,108 @@ def clear_all_break_bookings():
     finally:
         conn.close()
 
+def save_break_template(template_name, break_slots, created_by):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        
+        # First mark existing template breaks as non-template
+        cursor.execute("UPDATE breaks SET is_template = 0 WHERE template_name = ?", (template_name,))
+        
+        # Save the template metadata
+        cursor.execute("""
+            INSERT OR REPLACE INTO break_templates (template_name, template_data, created_by, timestamp)
+            VALUES (?, ?, ?, ?)
+        """, (
+            template_name,
+            json.dumps(break_slots),
+            created_by,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+        
+        # Save each break slot as a template
+        for slot in break_slots:
+            add_break_slot(
+                slot['break_name'],
+                slot['start_time'],
+                slot['end_time'],
+                slot['max_users'],
+                created_by,
+                slot.get('shift', 'all'),
+                slot.get('team', 'all'),
+                True,
+                template_name
+            )
+        
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_break_templates():
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM break_templates ORDER BY template_name")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def apply_break_template(template_name, target_date, created_by):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        
+        # Get the template data
+        cursor.execute("SELECT template_data FROM break_templates WHERE template_name = ?", (template_name,))
+        result = cursor.fetchone()
+        if not result:
+            return False
+            
+        break_slots = json.loads(result[0])
+        
+        # Clear existing breaks for this date
+        cursor.execute("""
+            DELETE FROM breaks 
+            WHERE is_template = 0 
+            AND date(timestamp) = date(?)
+        """, (target_date,))
+        
+        # Create the breaks for the target date
+        for slot in break_slots:
+            add_break_slot(
+                slot['break_name'],
+                slot['start_time'],
+                slot['end_time'],
+                slot['max_users'],
+                created_by,
+                slot.get('shift', 'all'),
+                slot.get('team', 'all')
+            )
+        
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_user_team_and_shift(username):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT team, shift FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        return result if result else ("all", "all")
+    finally:
+        conn.close()
+
 # --------------------------
 # Streamlit App
 # --------------------------
@@ -536,6 +705,21 @@ st.markdown("""
         padding: 1rem;
         margin-bottom: 1rem;
         color: #FFCDD2;
+    }
+    .break-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
+    .team-badge {
+        background-color: #3b82f6;
+        color: white;
+    }
+    .shift-badge {
+        background-color: #10b981;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -730,6 +914,9 @@ else:
         selected_date = st.date_input("Select date", datetime.now())
         formatted_date = selected_date.strftime("%Y-%m-%d")
         
+        # Get user's team and shift for filtering
+        user_team, user_shift = get_user_team_and_shift(st.session_state.username)
+        
         if st.session_state.role == "admin":
             st.subheader("Admin: Break Schedule Management")
             
@@ -739,7 +926,15 @@ else:
                     break_name = cols[0].text_input("Break Name")
                     start_time = cols[1].time_input("Start Time")
                     end_time = cols[2].time_input("End Time")
-                    max_users = st.number_input("Max Users", min_value=1, value=1)
+                    
+                    cols = st.columns(2)
+                    max_users = cols[0].number_input("Max Users", min_value=1, value=1)
+                    shift = cols[1].selectbox("Shift", ["all", "first", "second"])
+                    
+                    cols = st.columns(2)
+                    team = cols[0].selectbox("Team", ["all", "english", "spanish"])
+                    is_template = cols[1].checkbox("Save as template")
+                    template_name = st.text_input("Template Name (if saving as template)") if is_template else None
                     
                     if st.form_submit_button("Add Break Slot"):
                         if break_name:
@@ -748,17 +943,59 @@ else:
                                 start_time.strftime("%H:%M"),
                                 end_time.strftime("%H:%M"),
                                 max_users,
-                                st.session_state.username
+                                st.session_state.username,
+                                shift,
+                                team,
+                                is_template,
+                                template_name
                             )
                             st.rerun()
             
+            with st.expander("📁 Manage Templates"):
+                st.subheader("Save Current Breaks as Template")
+                with st.form("save_template_form"):
+                    template_name = st.text_input("Template Name")
+                    if st.form_submit_button("Save as Template"):
+                        current_breaks = get_all_break_slots(is_template=False)
+                        break_slots = []
+                        for b in current_breaks:
+                            break_slots.append({
+                                'break_name': b[1],
+                                'start_time': b[2],
+                                'end_time': b[3],
+                                'max_users': b[4],
+                                'shift': b[7],
+                                'team': b[8]
+                            })
+                        if save_break_template(template_name, break_slots, st.session_state.username):
+                            st.success("Template saved successfully!")
+                            st.rerun()
+                
+                st.subheader("Apply Template")
+                templates = get_break_templates()
+                if templates:
+                    selected_template = st.selectbox("Select Template", [t[1] for t in templates])
+                    apply_date = st.date_input("Apply to date", datetime.now())
+                    if st.button("Apply Template"):
+                        if apply_break_template(selected_template, apply_date.strftime("%Y-%m-%d"), st.session_state.username):
+                            st.success(f"Template '{selected_template}' applied successfully!")
+                            st.rerun()
+                else:
+                    st.info("No templates available")
+            
             st.subheader("Current Break Schedule")
-            breaks = get_all_break_slots()
+            breaks = get_all_break_slots(is_template=False)
             for b in breaks:
-                b_id, name, start, end, max_u, curr_u, created_by, ts = b
+                b_id, name, start, end, max_u, curr_u, created_by, ts, shift, team, is_template, template_name = b
                 with st.container():
                     cols = st.columns([3, 2, 2, 1, 1])
-                    cols[0].write(f"{name} ({start} - {end})")
+                    cols[0].markdown(f"""
+                    <div>
+                        <strong>{name}</strong> ({start} - {end})
+                        <span class="break-badge team-badge">{team}</span>
+                        <span class="break-badge shift-badge">{shift}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
                     cols[1].write(f"Max: {max_u}")
                     cols[2].write(f"Created by: {created_by}")
                     
@@ -774,8 +1011,14 @@ else:
             bookings = get_all_bookings(formatted_date)
             if bookings:
                 for b in bookings:
-                    b_id, break_id, user_id, username, date, ts, break_name, start, end, role = b
-                    st.write(f"{username} ({role}) - {break_name} ({start} - {end})")
+                    b_id, break_id, user_id, username, date, ts, break_name, start, end, role, team, shift = b
+                    st.markdown(f"""
+                    <div>
+                        {username} ({role}) - {break_name} ({start} - {end})
+                        <span class="break-badge team-badge">{team}</span>
+                        <span class="break-badge shift-badge">{shift}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
                 st.info("No bookings for selected date")
             
@@ -785,11 +1028,11 @@ else:
         
         else:
             st.subheader("Available Break Slots")
-            available_breaks = get_available_break_slots(formatted_date)
+            available_breaks = get_available_break_slots(formatted_date, user_team, user_shift)
             
             if available_breaks:
                 for b in available_breaks:
-                    b_id, name, start, end, max_u, curr_u, created_by, ts = b
+                    b_id, name, start, end, max_u, curr_u, created_by, ts, shift, team, is_template, template_name = b
                     
                     # Get current bookings for this break
                     conn = sqlite3.connect("data/requests.db")
@@ -806,7 +1049,13 @@ else:
                     
                     with st.container():
                         cols = st.columns([3, 2, 1])
-                        cols[0].write(f"**{name}** ({start} - {end})")
+                        cols[0].markdown(f"""
+                        <div>
+                            <strong>{name}</strong> ({start} - {end})
+                            <span class="break-badge team-badge">{team}</span>
+                            <span class="break-badge shift-badge">{shift}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                         cols[1].write(f"Available slots: {remaining}/{max_u}")
                         
                         if cols[2].button("Book", key=f"book_{b_id}"):
@@ -987,21 +1236,30 @@ else:
         st.subheader("User Management")
         if not is_killswitch_enabled():
             with st.form("add_user"):
-                user = st.text_input("Username")
-                pwd = st.text_input("Password", type="password")
-                role = st.selectbox("Role", ["agent", "admin"])
+                cols = st.columns(2)
+                user = cols[0].text_input("Username")
+                pwd = cols[1].text_input("Password", type="password")
+                
+                cols = st.columns(3)
+                role = cols[0].selectbox("Role", ["agent", "admin"])
+                team = cols[1].selectbox("Team", ["all", "english", "spanish"])
+                shift = cols[2].selectbox("Shift", ["all", "first", "second"])
+                
                 if st.form_submit_button("Add User"):
                     if user and pwd:
-                        add_user(user, pwd, role)
+                        add_user(user, pwd, role, team, shift)
                         st.rerun()
         
         st.subheader("Existing Users")
         users = get_all_users()
-        for uid, uname, urole in users:
-            cols = st.columns([3, 1, 1])
+        for uid, uname, urole, uteam, ushift in users:
+            cols = st.columns([2, 1, 1, 1, 1])
             cols[0].write(uname)
             cols[1].write(urole)
-            if cols[2].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
+            cols[2].markdown(f'<span class="break-badge team-badge">{uteam}</span>', unsafe_allow_html=True)
+            cols[3].markdown(f'<span class="break-badge shift-badge">{ushift}</span>', unsafe_allow_html=True)
+            
+            if cols[4].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
                 delete_user(uid)
                 st.rerun()
 
