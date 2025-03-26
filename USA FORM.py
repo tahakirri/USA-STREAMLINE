@@ -1115,26 +1115,31 @@ def admin_section():
     st.title("Admin Panel")
     
     if st.session_state.username.lower() == "taha kirri":
-        st.subheader("🚨 System Killswitch")
+        st.subheader("System Killswitch")
         current = is_killswitch_enabled()
         status = "🔴 ACTIVE" if current else "🟢 INACTIVE"
         st.write(f"Current Status: {status}")
         
         col1, col2 = st.columns(2)
-       if current:
-        st.markdown('''  # <- Start with single quotes
-            <div class="killswitch-active">
-                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-                <p>The system is currently in read-only mode.</p>
-            </div>
-            ''',  # <- Close with matching single quotes
-            unsafe_allow_html=True
-            )
+        if current:
+            if col1.button("Deactivate Killswitch"):
+                if toggle_killswitch(False):
+                    st.success("Killswitch deactivated!")
+                    st.rerun()
         else:
             if col1.button("Activate Killswitch"):
                 if toggle_killswitch(True):
                     st.success("Killswitch activated!")
                     st.rerun()
+        
+        # Fixed killswitch message using f-string and escaped characters
+        if current:
+            st.markdown(f'''
+            <div class="killswitch-active">
+                <h3>{"⚠️"} SYSTEM LOCKED {"⚠️"}</h3>
+                <p>The system is currently in read-only mode.</p>
+            </div>
+            ''', unsafe_allow_html=True)
     
     skillset_management()
     user_management()
