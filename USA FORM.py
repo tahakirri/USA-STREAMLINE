@@ -630,7 +630,79 @@ else:
 
   elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
     st.subheader("Admin Panel")  # This line MUST be indented
-    
+     
+        st.markdown("---")
+        st.subheader("🧹 Data Management")
+         # Clear Requests
+        with st.expander("❌ Clear All Requests"):
+            with st.form("clear_requests_form"):
+                st.warning("This will permanently delete ALL requests!")
+                confirm = st.text_input("Type 'DELETE REQUESTS' to confirm")
+                if st.form_submit_button("Clear All Requests"):
+                    if confirm == "DELETE REQUESTS":
+                        if clear_all_requests():
+                            st.success("All requests deleted!")
+                            st.rerun()
+                    else:
+                        st.error("Confirmation text does not match")
+
+        # Clear Mistakes
+        with st.expander("❌ Clear All Mistakes"):
+            with st.form("clear_mistakes_form"):
+                st.warning("This will permanently delete ALL mistakes!")
+                confirm = st.text_input("Type 'DELETE MISTAKES' to confirm")
+                if st.form_submit_button("Clear All Mistakes"):
+                    if confirm == "DELETE MISTAKES":
+                        if clear_all_mistakes():
+                            st.success("All mistakes deleted!")
+                            st.rerun()
+                    else:
+                        st.error("Confirmation text does not match")
+
+        # Clear Chat
+        with st.expander("❌ Clear All Chat Messages"):
+            with st.form("clear_chat_form"):
+                st.warning("This will permanently delete ALL chat messages!")
+                confirm = st.text_input("Type 'DELETE CHAT' to confirm")
+                if st.form_submit_button("Clear All Chat"):
+                    if confirm == "DELETE CHAT":
+                        if clear_all_group_messages():
+                            st.success("All chat messages deleted!")
+                            st.rerun()
+                    else:
+                        st.error("Confirmation text does not match")
+
+        # Clear HOLD Images
+        with st.expander("❌ Clear All HOLD Images"):
+            with st.form("clear_hold_form"):
+                st.warning("This will permanently delete ALL HOLD images!")
+                confirm = st.text_input("Type 'DELETE HOLD' to confirm")
+                if st.form_submit_button("Clear All HOLD Images"):
+                    if confirm == "DELETE HOLD":
+                        if clear_hold_images():
+                            st.success("All HOLD images deleted!")
+                            st.rerun()
+                    else:
+                        st.error("Confirmation text does not match")
+
+        # Nuclear Option
+        with st.expander("💣 Clear ALL Data"):
+            with st.form("nuclear_form"):
+                st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
+                confirm = st.text_input("Type 'NUKE SYSTEM' to confirm")
+                if st.form_submit_button("🚨 Execute Full System Wipe"):
+                    if confirm == "NUKE SYSTEM":
+                        try:
+                            clear_all_requests()
+                            clear_all_mistakes()
+                            clear_all_group_messages()
+                            clear_hold_images()
+                            st.success("All system data deleted!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error during deletion: {str(e)}")
+                    else:
+                        st.error("Confirmation text does not match")
     # System Killswitch (Developer Only)
     if st.session_state.username.lower() == "taha kirri":
         st.markdown("---")
