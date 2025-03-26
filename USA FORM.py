@@ -104,11 +104,11 @@ def init_db():
             )
         """)
         
-     # Default admin account - only taha kirri
-cursor.execute("""
-    INSERT OR IGNORE INTO users (username, password, role) 
-    VALUES (?, ?, ?)
-""", ("taha kirri", hash_password("arise@99"), "admin"))
+        # Only create the taha kirri admin account
+        cursor.execute("""
+            INSERT OR IGNORE INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, ("taha kirri", hash_password("arise@99"), "admin"))
         
         conn.commit()
     except sqlite3.Error as e:
