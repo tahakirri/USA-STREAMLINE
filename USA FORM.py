@@ -1089,8 +1089,7 @@ def chat_section():
     messages = get_group_messages()
     for msg in reversed(messages):
         msg_id, sender, message, ts, mentions = msg
-        is_mentioned = st.session_state.username in (mentions.split(',') if mentions else []
-        st.markdown(f"""
+        is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
         <div class="message {'sent' if sender == st.session_state.username else 'received'}"
             style="{'background-color: #3b82f6' if is_mentioned else ''}">
             <strong>{sender}</strong>: {message}<br>
