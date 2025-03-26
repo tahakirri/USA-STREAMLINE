@@ -15,6 +15,33 @@ import io
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
+def authenticate(username, password):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        
+        # Hash the provided password
+        hashed_password = hash_password(password)
+        
+        # Check credentials against users table
+        cursor.execute("""
+            SELECT role FROM users 
+            WHERE username = ? AND password = ?
+        """, (username, hashed_password))
+        
+        result = cursor.fetchone()
+        
+        # Return role if credentials are valid, otherwise return None
+        return result[0] if result else None
+    
+    except sqlite3.Error as e:
+        st.error(f"Authentication error: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 def init_db():
     conn = None
     try:
@@ -96,7 +123,57 @@ def init_db():
         if conn:
             conn.close()
 
-# ... (keep all other existing database functions the same)
+def add_request(agent_name, request_type, identifier, comment):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add request: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_requests():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM requests 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch requests: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def update_request_status(request_id, completed):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE requests 
+            SET completed = ? 
+            WHERE id = ?
+        """, (1 if completed else 0, request_id))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to update request status: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def add_hold_image(uploader, image_data):
     conn = None
@@ -146,7 +223,30 @@ def clear_hold_images():
         if conn:
             conn.close()
 
-# ... (keep all other existing functions the same)
+def show_notification(message):
+    """
+    Display a temporary notification in Streamlit
+    Note: This is a placeholder function, you might want to implement
+    more advanced notification mechanisms
+    """
+    st.toast(message)
+
+def get_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch group messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
 
 # --------------------------
 # Streamlit UI
@@ -362,7 +462,9 @@ else:
                 st.success("All HOLD images cleared!")
                 st.session_state.hold_images = []
 
-    # ... (keep all other sections the same as before)
+    # Placeholder for other sections (Mistakes, Chat, Admin)
+    elif st.session_state.current_section in ["mistakes", "chat", "admin"]:
+        st.warning("Section under development")
 
 # Check for new messages and requests
 if st.session_state.get("authenticated", False):
@@ -377,3 +479,6 @@ if st.session_state.get("authenticated", False):
         st.session_state.last_request_count = current_request_count
         if st.session_state.current_section != "requests" and st.session_state.role == "admin":
             show_notification("New request submitted!")
+
+if __name__ == "__main__":
+    st.write("Request Management System")
