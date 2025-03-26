@@ -111,7 +111,7 @@ def init_db():
         if conn:
             conn.close()
 
-def is_killswitch_enabled():
+def is_killswitch_enabled():  # ADD THIS FUNCTION EARLY
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
