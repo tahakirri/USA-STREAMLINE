@@ -685,9 +685,9 @@ else:
                     st.success("All HOLD images have been cleared!")
                     st.rerun()
 
-   # HOLD Section
+  # HOLD Section
 elif st.session_state.current_section == "hold":
-    # Only show upload functionality to admins
+    # Admin-only upload section
     if st.session_state.role == "admin":
         with st.container():
             st.subheader("Upload Image to HOLD")
@@ -697,19 +697,17 @@ elif st.session_state.current_section == "hold":
                 image_data = uploaded_image.read()
                 add_hold_image(st.session_state.username, image_data)
                 st.success("Image uploaded successfully!")
-                
-                # Display the uploaded image
-                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
+                st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
     else:
         st.info("🔒 Only administrators can upload images to HOLD")
 
+    # Display section (visible to all)
     st.subheader("Check HOLD Images")
     hold_images = get_hold_images()
     
     if hold_images:
         for img in hold_images:
             img_id, uploader, image_data, timestamp = img
-            
             with st.container():
                 st.markdown(f"""
                 <div class="card">
@@ -720,14 +718,12 @@ elif st.session_state.current_section == "hold":
                     <p><strong>Uploaded by:</strong> {uploader}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Display the image
-                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
-    
+                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_column_width=True)
+
+    # Admin-only clear button
     if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
         if clear_hold_images():
             st.success("All HOLD images cleared!")
-
 # Run the app
 if __name__ == "__main__":
     st.write("Request Management System")
