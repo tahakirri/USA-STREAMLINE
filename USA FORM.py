@@ -123,6 +123,132 @@ def init_db():
         if conn:
             conn.close()
 
+# Mistakes Section Functions
+def add_mistake(team_leader, agent_name, ticket_id, error_description):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add mistake: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch mistakes: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+# Group Chat Functions
+def send_group_message(sender, message):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        
+        # Extract mentions
+        mentions = re.findall(r'@(\w+)', message)
+        
+        cursor.execute("""
+            INSERT INTO group_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to send message: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch group messages: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+# Admin Panel Functions
+def get_all_users():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, role FROM users")
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def add_user(username, password, role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, (username, hash_password(password), role))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(user_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to delete user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+# Existing functions from previous implementation...
 def add_request(agent_name, request_type, identifier, comment):
     conn = None
     try:
@@ -223,36 +349,7 @@ def clear_hold_images():
         if conn:
             conn.close()
 
-def show_notification(message):
-    """
-    Display a temporary notification in Streamlit
-    Note: This is a placeholder function, you might want to implement
-    more advanced notification mechanisms
-    """
-    st.toast(message)
-
-def get_group_messages():
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM group_messages 
-            ORDER BY timestamp DESC
-        """)
-        return cursor.fetchall()
-    except sqlite3.Error as e:
-        st.error(f"Failed to fetch group messages: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-# --------------------------
-# Streamlit UI
-# --------------------------
-
-# Set page config
+# Streamlit App Configuration
 st.set_page_config(
     page_title="Request Management System", 
     page_icon=":office:",
@@ -260,15 +357,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Add custom CSS
+# Custom CSS
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #f8f9fa;
-    }
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e9ecef;
+    .stApp { background-color: #f8f9fa; }
+    [data-testid="stSidebar"] { 
+        background-color: #ffffff; 
+        border-right: 1px solid #e9ecef; 
     }
     .stButton>button {
         background-color: #3b82f6;
@@ -306,10 +401,8 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.role = None
     st.session_state.username = None
-    st.session_state.last_message_count = 0
-    st.session_state.last_request_count = 0
     st.session_state.current_section = "requests"
-    st.session_state.hold_images = []
+    st.session_state.last_message_count = 0
 
 # Initialize database
 init_db()
@@ -376,7 +469,7 @@ else:
              f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
              f" {st.session_state.current_section.title()}")
 
-    # Requests Section
+    # Requests Section (Previous implementation)
     if st.session_state.current_section == "requests":
         with st.container():
             st.subheader("Submit a Request")
@@ -389,40 +482,127 @@ else:
                     if identifier and comment:
                         if add_request(st.session_state.username, request_type, identifier, comment):
                             st.success("Request submitted!")
-                            show_notification("New request submitted!")
         
         st.subheader("All Requests")
         requests = get_requests()
-        if requests:
-            for req in requests:
-                req_id, agent, req_type, identifier, comment, timestamp, completed = req
-                
-                with st.container():
-                    cols = st.columns([0.1, 0.9])
-                    with cols[0]:
-                        st.checkbox(
-                            "Done",
-                            value=bool(completed),
-                            key=f"check_{req_id}",
-                            on_change=update_request_status,
-                            args=(req_id, not completed))
-                    with cols[1]:
-                        st.markdown(f"""
-                        <div class="card">
-                            <div style="display: flex; justify-content: space-between;">
-                                <h4>Request #{req_id} - {req_type}</h4>
-                                <small>{timestamp}</small>
-                            </div>
-                            <p><strong>Agent:</strong> {agent}</p>
-                            <p><strong>Identifier:</strong> {identifier}</p>
-                            <p><strong>Comment:</strong> {comment}</p>
+        for req in requests:
+            req_id, agent, req_type, identifier, comment, timestamp, completed = req
+            
+            with st.container():
+                cols = st.columns([0.1, 0.9])
+                with cols[0]:
+                    st.checkbox(
+                        "Done",
+                        value=bool(completed),
+                        key=f"check_{req_id}",
+                        on_change=update_request_status,
+                        args=(req_id, not completed))
+                with cols[1]:
+                    st.markdown(f"""
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h4>Request #{req_id} - {req_type}</h4>
+                            <small>{timestamp}</small>
                         </div>
-                        """, unsafe_allow_html=True)
-        else:
-            st.info("No requests found.")
+                        <p><strong>Agent:</strong> {agent}</p>
+                        <p><strong>Identifier:</strong> {identifier}</p>
+                        <p><strong>Comment:</strong> {comment}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    # HOLD Section
+    # Ticket Mistakes Section
+    elif st.session_state.current_section == "mistakes":
+        st.subheader("Report a Ticket Mistake")
+        with st.form("mistake_form"):
+            ticket_id = st.text_input("Ticket ID")
+            agent_name = st.text_input("Agent Name")
+            error_description = st.text_area("Error Description")
+            
+            if st.form_submit_button("Report Mistake"):
+                if ticket_id and agent_name and error_description:
+                    if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
+                        st.success("Mistake reported successfully!")
+        
+        st.subheader("Ticket Mistakes Log")
+        mistakes = get_mistakes()
+        if mistakes:
+            for mistake in mistakes:
+                mistake_id, team_leader, agent_name, ticket_id, error_desc, timestamp = mistake
+                st.markdown(f"""
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between;">
+                        <h4>Mistake #{mistake_id}</h4>
+                        <small>{timestamp}</small>
+                    </div>
+                    <p><strong>Team Leader:</strong> {team_leader}</p>
+                    <p><strong>Agent:</strong> {agent_name}</p>
+                    <p><strong>Ticket ID:</strong> {ticket_id}</p>
+                    <p><strong>Error Description:</strong> {error_desc}</p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No mistakes reported.")
+
+    # Group Chat Section
+    elif st.session_state.current_section == "chat":
+        st.subheader("Group Chat")
+        
+        # Display messages
+        messages = get_group_messages()
+        for msg in reversed(messages):
+            msg_id, sender, message, timestamp, mentions = msg
+            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+            
+            st.markdown(f"""
+            <div class="message {'sent' if sender == st.session_state.username else 'received'}" 
+                 style="{'background-color: #3b82f6; color: white;' if is_mentioned else ''}">
+                <strong>{sender}</strong> {message}
+                <br><small>{timestamp}</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Send message form
+        with st.form("chat_form"):
+            message = st.text_input("Type your message (use @username to mention)")
+            
+            if st.form_submit_button("Send"):
+                if message:
+                    if send_group_message(st.session_state.username, message):
+                        st.experimental_rerun()
+
+    # Admin Panel Section
+    elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+        st.subheader("User Management")
+        
+        # Add User Form
+        with st.form("add_user_form"):
+            new_username = st.text_input("New Username")
+            new_password = st.text_input("Password", type="password")
+            new_role = st.selectbox("Role", ["agent", "admin"])
+            
+            if st.form_submit_button("Add User"):
+                if new_username and new_password:
+                    if add_user(new_username, new_password, new_role):
+                        st.success(f"User {new_username} added successfully!")
+        
+        # User List
+        st.subheader("Existing Users")
+        users = get_all_users()
+        for user_id, username, role in users:
+            cols = st.columns([0.6, 0.2, 0.2])
+            with cols[0]:
+                st.write(f"**{username}**")
+            with cols[1]:
+                st.write(role)
+            with cols[2]:
+                if st.button(f"Delete {username}", key=f"delete_{user_id}"):
+                    if delete_user(user_id):
+                        st.success(f"User {username} deleted!")
+                        st.experimental_rerun()
+
+    # HOLD Section (Previous implementation)
     elif st.session_state.current_section == "hold":
+        # [Previous HOLD section implementation remains the same]
         with st.container():
             st.subheader("Upload Image to HOLD")
             uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
@@ -436,11 +616,10 @@ else:
                 st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
         
         st.subheader("Check HOLD Images")
-        if st.button("🔍 Check HOLD"):
-            st.session_state.hold_images = get_hold_images()
+        hold_images = get_hold_images()
         
-        if hasattr(st.session_state, 'hold_images') and st.session_state.hold_images:
-            for img in st.session_state.hold_images:
+        if hold_images:
+            for img in hold_images:
                 img_id, uploader, image_data, timestamp = img
                 
                 with st.container():
@@ -460,25 +639,7 @@ else:
         if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
             if clear_hold_images():
                 st.success("All HOLD images cleared!")
-                st.session_state.hold_images = []
 
-    # Placeholder for other sections (Mistakes, Chat, Admin)
-    elif st.session_state.current_section in ["mistakes", "chat", "admin"]:
-        st.warning("Section under development")
-
-# Check for new messages and requests
-if st.session_state.get("authenticated", False):
-    current_message_count = len(get_group_messages())
-    if current_message_count > st.session_state.get("last_message_count", 0):
-        st.session_state.last_message_count = current_message_count
-        if st.session_state.current_section != "chat":
-            show_notification("New message in group chat")
-    
-    current_request_count = len(get_requests())
-    if current_request_count > st.session_state.get("last_request_count", 0):
-        st.session_state.last_request_count = current_request_count
-        if st.session_state.current_section != "requests" and st.session_state.role == "admin":
-            show_notification("New request submitted!")
-
+# Run the app
 if __name__ == "__main__":
     st.write("Request Management System")
