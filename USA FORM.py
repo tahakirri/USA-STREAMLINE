@@ -743,7 +743,7 @@ else:
         # Send message form
         if not is_killswitch_enabled():
             with st.form("chat_form"):
-                message = st.text_input("Type your message (use @username to mention)")
+                message = st.text_input("Type your message")
                 
                 if st.form_submit_button("Send"):
                     if message:
