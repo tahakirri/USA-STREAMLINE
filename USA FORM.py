@@ -33,7 +33,6 @@ def init_db():
     try:
         cursor = conn.cursor()
         
-        # Create tables
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,7 +85,6 @@ def init_db():
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
         
-        # Initial data
         cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
@@ -386,6 +384,13 @@ st.markdown("""
     .stButton>button { background-color: #2563EB; color: white; }
     .card { background-color: #1F1F1F; border-radius: 12px; padding: 1.5rem; }
     .metric-card { background-color: #1F2937; border-radius: 10px; padding: 20px; }
+    .killswitch-active {
+        background-color: #4A1E1E;
+        border-left: 5px solid #D32F2F;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        color: #FFCDD2;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -439,19 +444,16 @@ else:
         current_mistakes = get_mistakes()
         current_messages = get_group_messages()
         
-        # Request notifications
         new_requests = len(current_requests) - st.session_state.last_request_count
         if new_requests > 0 and st.session_state.last_request_count > 0:
             st.toast(f"📋 {new_requests} new request(s) submitted!")
         st.session_state.last_request_count = len(current_requests)
         
-        # Mistake notifications
         new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
         if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
             st.toast(f"❌ {new_mistakes} new mistake(s) reported!")
         st.session_state.last_mistake_count = len(current_mistakes)
         
-        # Message notifications
         current_message_ids = [msg[0] for msg in current_messages]
         new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
         for msg in new_messages:
@@ -630,61 +632,6 @@ else:
 
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
         if st.session_state.username.lower() == "taha kirri":
-             st.markdown("---")
-        st.subheader("🧹 Data Management")
-        
-       # Clear Requests
-        with st.expander("❌ Clear All Requests"):
-            with st.form("clear_requests_form"):
-                st.warning("This will permanently delete ALL requests!")
-                if st.form_submit_button("Clear All Requests"):
-                    if clear_all_requests():
-                        st.success("All requests deleted!")
-                        st.rerun()
-
-        # Clear Mistakes
-        with st.expander("❌ Clear All Mistakes"):
-            with st.form("clear_mistakes_form"):
-                st.warning("This will permanently delete ALL mistakes!")
-                if st.form_submit_button("Clear All Mistakes"):
-                    if clear_all_mistakes():
-                        st.success("All mistakes deleted!")
-                        st.rerun()
-
-        # Clear Chat
-        with st.expander("❌ Clear All Chat Messages"):
-            with st.form("clear_chat_form"):
-                st.warning("This will permanently delete ALL chat messages!")
-                if st.form_submit_button("Clear All Chat"):
-                    if clear_all_group_messages():
-                        st.success("All chat messages deleted!")
-                        st.rerun()
-
-        # Clear HOLD Images
-        with st.expander("❌ Clear All HOLD Images"):
-            with st.form("clear_hold_form"):
-                st.warning("This will permanently delete ALL HOLD images!")
-                if st.form_submit_button("Clear All HOLD Images"):
-                    if clear_hold_images():
-                        st.success("All HOLD images deleted!")
-                        st.rerun()
-
-        # Nuclear Option
-        with st.expander("💣 Clear ALL Data"):
-            with st.form("nuclear_form"):
-                st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
-                if st.form_submit_button("🚨 Execute Full System Wipe"):
-                    try:
-                        clear_all_requests()
-                        clear_all_mistakes()
-                        clear_all_group_messages()
-                        clear_hold_images()
-                        st.success("All system data deleted!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error during deletion: {str(e)}")
-        
-            
             st.subheader("🚨 System Killswitch")
             current = is_killswitch_enabled()
             status = "🔴 ACTIVE" if current else "🟢 INACTIVE"
@@ -699,7 +646,57 @@ else:
                 if col1.button("Activate Killswitch"):
                     toggle_killswitch(True)
                     st.rerun()
+            st.markdown("---")
         
+        st.subheader("🧹 Data Management")
+        
+        with st.expander("❌ Clear All Requests"):
+            with st.form("clear_requests_form"):
+                st.warning("This will permanently delete ALL requests!")
+                if st.form_submit_button("Clear All Requests"):
+                    if clear_all_requests():
+                        st.success("All requests deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Mistakes"):
+            with st.form("clear_mistakes_form"):
+                st.warning("This will permanently delete ALL mistakes!")
+                if st.form_submit_button("Clear All Mistakes"):
+                    if clear_all_mistakes():
+                        st.success("All mistakes deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Chat Messages"):
+            with st.form("clear_chat_form"):
+                st.warning("This will permanently delete ALL chat messages!")
+                if st.form_submit_button("Clear All Chat"):
+                    if clear_all_group_messages():
+                        st.success("All chat messages deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All HOLD Images"):
+            with st.form("clear_hold_form"):
+                st.warning("This will permanently delete ALL HOLD images!")
+                if st.form_submit_button("Clear All HOLD Images"):
+                    if clear_hold_images():
+                        st.success("All HOLD images deleted!")
+                        st.rerun()
+
+        with st.expander("💣 Clear ALL Data"):
+            with st.form("nuclear_form"):
+                st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
+                if st.form_submit_button("🚨 Execute Full System Wipe"):
+                    try:
+                        clear_all_requests()
+                        clear_all_mistakes()
+                        clear_all_group_messages()
+                        clear_hold_images()
+                        st.success("All system data deleted!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error during deletion: {str(e)}")
+        
+        st.markdown("---")
         st.subheader("User Management")
         if not is_killswitch_enabled():
             with st.form("add_user"):
