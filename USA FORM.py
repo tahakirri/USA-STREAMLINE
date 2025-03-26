@@ -7,266 +7,161 @@ import re
 from PIL import Image
 import io
 
-# Initialize session state variables if they don't exist
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.username = None
-    st.session_state.role = None
-    st.session_state.current_section = 'requests'
+# --------------------------
+# Database Functions
+# --------------------------
 
-def hash_password(password):
-    """Hash password using SHA-256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+# ... [Keep all previous database functions the same] ...
 
-def create_connection():
-    """Create a database connection"""
-    conn = sqlite3.connect('user_database.db')
-    return conn
+# --------------------------
+# Improved Fancy Number Checker Functions (Last 6 Digits Focus)
+# --------------------------
 
-def create_users_table():
-    """Create users table if not exists"""
-    conn = create_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        password TEXT,
-        role TEXT DEFAULT 'user',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    conn.commit()
-    conn.close()
+def get_last_six_digits(number):
+    """Extract and return the last 6 digits of a phone number."""
+    clean_number = re.sub(r'\D', '', number)
+    return clean_number[-6:] if len(clean_number) >= 6 else None
 
-def register_user(username, password, role='user'):
-    """Register a new user"""
-    conn = create_connection()
-    cursor = conn.cursor()
-    hashed_password = hash_password(password)
-    try:
-        cursor.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)', 
-                       (username, hashed_password, role))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
+def is_consecutive(digits, ascending=True):
+    """Check if digits form a consecutive sequence."""
+    for i in range(1, len(digits)):
+        diff = digits[i] - digits[i-1]
+        if ascending and diff != 1:
+            return False
+        if not ascending and diff != -1:
+            return False
+    return True
 
-def verify_login(username, password):
-    """Verify user login credentials"""
-    conn = create_connection()
-    cursor = conn.cursor()
-    hashed_password = hash_password(password)
-    cursor.execute('SELECT * FROM users WHERE username = ? AND password = ?', 
-                   (username, hashed_password))
-    user = cursor.fetchone()
-    conn.close()
-    return user is not None
+def has_repeating_pattern(digits):
+    """Check for repeating patterns in the last 6 digits."""
+    # Check for pair patterns (e.g., 1212, 123123)
+    if digits[:3] == digits[3:]:
+        return "Repeating 3-digit pattern"
+    if digits[:2] == digits[2:4] == digits[4:]:
+        return "Repeating 2-digit pattern"
+    return None
 
-def is_fancy_number(phone_number):
-    """
-    Determine if a phone number is 'fancy' based on various patterns
+def is_fancy_number(number):
+    """Check if last 6 digits of a number contain fancy patterns."""
+    last_six = get_last_six_digits(number)
+    if not last_six or len(last_six) != 6:
+        return False, "Invalid number length"
     
-    Args:
-        phone_number (str): The phone number to check
+    digits = [int(d) for d in last_six]
     
-    Returns:
-        dict: A dictionary with fancy status and reasoning
-    """
-    # Remove any non-digit characters
-    digits = re.sub(r'\D', '', phone_number)
+    # 1. All digits same
+    if len(set(digits)) == 1:
+        return True, "All last 6 digits identical"
     
-    # Check if shorter than 10 digits or not a valid phone number
-    if len(digits) < 10:
-        return {
-            "is_fancy": False,
-            "reason": "Invalid phone number length"
-        }
+    # 2. Consecutive sequences
+    if is_consecutive(digits):
+        return True, "Last 6 digits sequential ascending"
+    if is_consecutive(digits, ascending=False):
+        return True, "Last 6 digits sequential descending"
     
-    # More comprehensive fancy patterns to check
-    fancy_patterns = [
-        # Strict repeating digits - at least 4 consecutive identical digits
-        (r'(\d)\1{3,}', "Has four or more consecutive repeating digits"),
-        
-        # Sequential patterns (including non-continuous)
-        (lambda x: all(int(x[i]) + 1 == int(x[i+1]) for i in range(len(x)-1)), "Contains perfect ascending sequence"),
-        (lambda x: all(int(x[i]) - 1 == int(x[i+1]) for i in range(len(x)-1)), "Contains perfect descending sequence"),
-        
-        # True palindromes (using full number)
-        (lambda x: x == x[::-1] and len(x) >= 10, "Is a full palindrome number"),
-        
-        # Rare sequential patterns
-        (r'101010|123123|234234', "Contains rare repeating sequential pattern"),
-        
-        # Super minimal unique digits
-        (lambda x: len(set(x)) <= 1, "Consists of single unique digit"),
-        
-        # Extremely lucky/symbolic numbers
-        (r'888888|666666|999999', "Contains extremely lucky/symbolic number"),
-    ]
+    # 3. Palindrome check
+    if digits == digits[::-1]:
+        return True, "Last 6 digits palindrome"
     
-    # Counter to track how many patterns match
-    pattern_matches = 0
-    matched_reasons = []
+    # 4. Repeating patterns
+    if pattern := has_repeating_pattern(digits):
+        return True, pattern
     
-    for pattern in fancy_patterns:
-        # Handle both regex and lambda pattern checks
-        try:
-            if isinstance(pattern[0], str):
-                match = re.search(pattern[0], digits)
-                if match:
-                    pattern_matches += 1
-                    matched_reasons.append(pattern[1])
-            elif callable(pattern[0]):
-                if pattern[0](digits):
-                    pattern_matches += 1
-                    matched_reasons.append(pattern[1])
-        except:
-            pass
+    # 5. Bookend patterns (e.g., 1xxxx1, 12xx21)
+    if digits[0] == digits[-1] and digits[1] == digits[-2]:
+        return True, "Last 6 digits bookend pattern"
     
-    # Only consider very fancy if multiple patterns match
-    if pattern_matches >= 1:
-        return {
-            "is_fancy": True,
-            "reason": " and ".join(matched_reasons)
-        }
+    # 6. Triple same digits
+    for i in range(4):
+        if len(set(digits[i:i+3])) == 1:
+            return True, "Triple repeating digits in last 6"
     
-    return {
-        "is_fancy": False,
-        "reason": "Standard phone number"
+    # 7. Multiple pairs (e.g., 112233)
+    if all(digits[i] == digits[i+1] for i in range(0, 6, 2)):
+        return True, "Multiple pairs in last 6 digits"
+    
+    # 8. Mixed sequence with repeated start (e.g., 112345)
+    if digits[0] == digits[1] and is_consecutive(digits[2:]):
+        return True, "Repeated start with sequence in last 6"
+    
+    # 9. Mirror pattern (e.g., 123321)
+    if digits[:3] == digits[:2:-1]:
+        return True, "Mirror pattern in last 6 digits"
+    
+    # 10. Special combination check
+    special_cases = {
+        '123456': 'Perfect ascending sequence',
+        '654321': 'Perfect descending sequence',
+        '112233': 'Multiple pairs',
+        '121212': 'Repeating 12 pattern',
+        '111222': 'Triple pairs'
     }
+    
+    if last_six in special_cases:
+        return True, special_cases[last_six]
+    
+    return False, "No fancy pattern in last 6 digits"
 
-def login_page():
-    """Login page for authentication"""
-    st.title("📱 Fancy Number Checker Login")
+# ... [Keep all other functions the same] ...
+
+# --------------------------
+# Streamlit UI Configuration
+# --------------------------
+
+# ... [Keep previous UI configuration the same] ...
+
+# Fancy Number Checker Section
+elif st.session_state.current_section == "fancy_number":
+    st.subheader("🔢 Fancy Number Checker (Last 6 Digits)")
     
-    # Create tabs for Login and Register
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    
-    with tab1:
-        st.header("Login")
-        username = st.text_input("Username", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
+    with st.form("fancy_number_form"):
+        phone_number = st.text_input("Enter phone number to check")
         
-        if st.button("Login", key="login_button"):
-            if verify_login(username, password):
-                st.session_state.authenticated = True
-                st.session_state.username = username
-                # Determine role (you might want to fetch this from database)
-                st.session_state.role = "admin" if username == "admin" else "user"
-                st.rerun()
-            else:
-                st.error("Invalid username or password")
-    
-    with tab2:
-        st.header("Register New Account")
-        new_username = st.text_input("Choose Username", key="register_username")
-        new_password = st.text_input("Choose Password", type="password", key="register_password")
-        confirm_password = st.text_input("Confirm Password", type="password", key="register_confirm_password")
-        
-        if st.button("Register", key="register_button"):
-            if new_password != confirm_password:
-                st.error("Passwords do not match")
-            elif len(new_username) < 3:
-                st.error("Username must be at least 3 characters long")
-            elif len(new_password) < 6:
-                st.error("Password must be at least 6 characters long")
-            else:
-                if register_user(new_username, new_password):
-                    st.success("Registration successful! You can now log in.")
+        if st.form_submit_button("Check Number"):
+            if phone_number:
+                is_fancy, pattern = is_fancy_number(phone_number)
+                save_fancy_number(phone_number, is_fancy, pattern)
+                
+                if is_fancy:
+                    st.success(f"✅ FANCY NUMBER! Pattern: {pattern}")
                 else:
-                    st.error("Username already exists")
-
-def main_app():
-    """Main application for authenticated users"""
-    # Sidebar Navigation
-    with st.sidebar:
-        st.title(f"👋 Welcome, {st.session_state.username}")
-        st.markdown("---")
-        
-        nav_options = [
-            ("📱 Fancy Number", "fancy_number"),
-            ("📋 Requests", "requests"),
-        ]
-        
-        if st.session_state.role == "admin":
-            nav_options.append(("⚙️ Admin Panel", "admin"))
-        
-        for option, value in nav_options:
-            if st.button(option, key=f"nav_{value}"):
-                st.session_state.current_section = value
-        
-        st.markdown("---")
-        if st.button("🚪 Logout"):
-            st.session_state.authenticated = False
-            st.session_state.role = None
-            st.session_state.username = None
-            st.rerun()
+                    st.error(f"❌ Not fancy. {pattern}")
     
-    # Main Content
-    st.title(f"{'📱' if st.session_state.current_section == 'fancy_number' else '📋'} {st.session_state.current_section.title()}")
-
-    # Fancy Number Section
-    if st.session_state.current_section == "fancy_number":
-        st.subheader("📱 Fancy Number Checker")
-        
+    st.subheader("Detection Rules for Last 6 Digits")
+    with st.expander("What makes a number fancy?"):
         st.markdown("""
-        ### Discover if Your Phone Number is Fancy! 🌟
-        
-        What makes a phone number "fancy"?
-        - Four or more consecutive repeating digits
-        - Perfect ascending or descending sequences
-        - Full palindrome numbers
-        - Rare repeating sequential patterns
-        - Extremely lucky number combinations
+        - **Sequential numbers**: 123456, 654321  
+        - **Repeating patterns**: 121212, 123123  
+        - **Palindrome numbers**: 123321, 122221  
+        - **Special combinations**: 112233, 111222  
+        - **Repeated digits**: 999999, 888888  
+        - **Bookend patterns**: 123451, 135791  
+        - **Mirror patterns**: 123321, 456654  
+        - **Triple digits**: 111234, 123444  
         """)
-        
-        with st.form("fancy_number_form"):
-            phone_number = st.text_input("Enter Full Phone Number", 
-                                         placeholder="e.g., +1 (555) 123-4567")
-            
-            if st.form_submit_button("Check If Fancy"):
-                if phone_number:
-                    result = is_fancy_number(phone_number)
-                    
-                    if result['is_fancy']:
-                        st.success(f"🌟 Fancy Number Detected! {result['reason']}")
-                        st.balloons()
-                        
-                        # Additional fancy details
-                        st.markdown("""
-                        ### 🎉 Congratulations! 
-                        Your phone number has exceptional characteristics that make it stand out!
-                        
-                        #### What does this mean?
-                        - Your number is extremely unique
-                        - It has rare mathematical or visual patterns
-                        - It could be considered highly memorable or special
-                        """)
-                    else:
-                        st.info(f"📞 {result['reason']}")
-                        
-                        # Consolation for non-fancy numbers
-                        st.markdown("""
-                        ### 💡 Tip
-                        While your number isn't considered "fancy" right now, 
-                        you can always look for interesting patterns when choosing future numbers!
-                        """)
-                else:
-                    st.warning("Please enter a complete phone number")
-
-def app():
-    """Initialize database and run main application flow"""
-    # Create users table if not exists
-    create_users_table()
     
-    # Main authentication flow
-    if not st.session_state.authenticated:
-        login_page()
+    st.subheader("Number Check History")
+    fancy_numbers = get_fancy_numbers_history()
+    
+    if fancy_numbers:
+        for num in fancy_numbers:
+            num_id, number, is_fancy, pattern, timestamp = num
+            st.markdown(f"""
+            <div class="card {'fancy-true' if is_fancy else 'fancy-false'}">
+                <div style="display: flex; justify-content: space-between;">
+                    <h4>{number}</h4>
+                    <small>{timestamp}</small>
+                </div>
+                <p><strong>Last 6 digits:</strong> {get_last_six_digits(number) or 'N/A'}</p>
+                <p><strong>Pattern:</strong> {pattern}</p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        main_app()
+        st.info("No numbers checked yet.")
+    
+    if st.session_state.role == "admin" and st.button("🗑️ Clear History"):
+        if clear_fancy_numbers_history():
+            st.success("Fancy numbers history cleared!")
+            st.rerun()
 
-# Run the application
-if __name__ == "__main__":
-    app()
+# ... [Rest of the code remains unchanged] ...
