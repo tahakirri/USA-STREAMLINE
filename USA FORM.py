@@ -43,30 +43,30 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('Agent', 'Admin')))
+                role TEXT CHECK(role IN ('agent', 'admin')))
         """)
         
         # Requests table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Agent_Name TEXT,
-                Request_type TEXT,
-                ID TEXT,
-                Comment TEXT,
-                Timestamp TEXT,
-                Completed INTEGER DEFAULT 0)
+                agent_name TEXT,
+                request_type TEXT,
+                identifier TEXT,
+                comment TEXT,
+                timestamp TEXT,
+                completed INTEGER DEFAULT 0)
         """)
         
         # Mistakes table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Team_Leader TEXT,
-                Agent_Name TEXT,
-                Ticket_ID TEXT,
-                Error_Description TEXT,
-                Timestamp TEXT)
+                team_leader TEXT,
+                agent_name TEXT,
+                ticket_id TEXT,
+                error_description TEXT,
+                timestamp TEXT)
         """)
         
         # Group messages table
@@ -102,6 +102,11 @@ def init_db():
         """)
         
         # Default admin accounts
+        cursor.execute("""
+            INSERT OR IGNORE INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, ("fouad fathi", hash_password("fathi@44"), "admin"))
+        
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
@@ -172,7 +177,7 @@ def toggle_killswitch(enable):
         if conn:
             conn.close()
 
-def add_request(Agent_Name, Request_type, ID, Comment):
+def add_request(agent_name, request_type, identifier, comment):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
@@ -182,9 +187,9 @@ def add_request(Agent_Name, Request_type, ID, Comment):
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO requests (Agent_Name, Request_Type, ID, Comment, Timestamp) 
+            INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
             VALUES (?, ?, ?, ?, ?)
-        """, (Agent_Name, Request_Type, ID, Comment, Datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -234,7 +239,7 @@ def update_request_status(request_id, completed):
         if conn:
             conn.close()
 
-def add_mistake(Team_Leader, Agent_Name, Ticket_ID, Error_Description):
+def add_mistake(team_leader, agent_name, ticket_id, error_description):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
         return False
@@ -244,9 +249,9 @@ def add_mistake(Team_Leader, Agent_Name, Ticket_ID, Error_Description):
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO mistakes (Team_Leader, Agent_Name, Ticket_ID, Error_Description, Timestamp) 
+            INSERT INTO mistakes (team_leader, agent_name, ticket_id, error_description, timestamp) 
             VALUES (?, ?, ?, ?, ?)
-        """, (Team_Leader, Agent_Name, Ticket_ID, Error_Description, Datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -592,7 +597,7 @@ else:
         st.markdown("""
         <div class="killswitch-active">
             <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-            <p> Please contact the developer for assistance.</p>
+            <p>The system is currently in read-only mode. Please contact the developer for assistance.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -650,7 +655,7 @@ else:
         st.subheader("All Requests")
         requests = get_requests()
         for req in requests:
-            req_id, Agent, Req_type, ID, comment, Timestamp, completed = req
+            req_id, agent, req_type, identifier, comment, timestamp, completed = req
             
             with st.container():
                 cols = st.columns([0.1, 0.9])
@@ -668,7 +673,6 @@ else:
                             value=bool(completed),
                             key=f"check_{req_id}",
                             disabled=True)
-                           disabled=True)
                 with cols[1]:
                     st.markdown(f"""
                     <div class="card">
@@ -682,20 +686,18 @@ else:
                     </div>
                     """, unsafe_allow_html=True)
 
-
-
     # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
         if not is_killswitch_enabled():
             st.subheader("Report a Ticket Mistake")
             with st.form("mistake_form"):
                 ticket_id = st.text_input("Ticket ID")
-                Agent_Name = st.text_input("Agent Name")
+                agent_name = st.text_input("Agent Name")
                 error_description = st.text_area("Error Description")
                 
                 if st.form_submit_button("Report Mistake"):
-                    if ticket_id and Agent_Name and error_description:
-                        if add_mistake(st.session_state.username, Agent_Name, Ticket_ID, Error_Description):
+                    if ticket_id and agent_name and error_description:
+                        if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
                             st.success("Mistake reported successfully!")
         else:
             st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
@@ -704,17 +706,17 @@ else:
         mistakes = get_mistakes()
         if mistakes:
             for mistake in mistakes:
-                mistake_id, Team_leader, Agent_name, Ticket_ID, Error_Desc, Timestamp = mistake
+                mistake_id, team_leader, agent_name, ticket_id, error_desc, timestamp = mistake
                 st.markdown(f"""
                 <div class="card">
                     <div style="display: flex; justify-content: space-between;">
                         <h4>Mistake #{mistake_id}</h4>
                         <small>{timestamp}</small>
                     </div>
-                    <p><strong>Team Leader:</strong> {Team_leader}</p>
-                    <p><strong>Agent:</strong> {Agent_Name}</p>
-                    <p><strong>Ticket ID:</strong> {Ticket_ID}</p>
-                    <p><strong>Error Description:</strong> {Error_Desc}</p>
+                    <p><strong>Team Leader:</strong> {team_leader}</p>
+                    <p><strong>Agent:</strong> {agent_name}</p>
+                    <p><strong>Ticket ID:</strong> {ticket_id}</p>
+                    <p><strong>Error Description:</strong> {error_desc}</p>
                 </div>
                 """, unsafe_allow_html=True)
         else:
@@ -781,7 +783,7 @@ else:
             with st.form("add_user_form"):
                 new_username = st.text_input("New Username")
                 new_password = st.text_input("Password", type="password")
-                new_role = st.selectbox("Role", ["Agent", "Admin"])
+                new_role = st.selectbox("Role", ["agent", "admin"])
                 
                 if st.form_submit_button("Add User"):
                     if new_username and new_password:
