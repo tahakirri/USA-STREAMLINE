@@ -585,7 +585,7 @@ else:
         unsafe_allow_html=True
     )
         
-        nav_items = {
+         nav_items = {
             "requests": ("📥", "Requests"),
             "mistakes": ("⚠️", "Quality"),
             "chat": ("💬", "Comms"),
