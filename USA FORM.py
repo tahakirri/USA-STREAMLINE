@@ -668,6 +668,7 @@ else:
                             value=bool(completed),
                             key=f"check_{req_id}",
                             disabled=True)
+                           disabled=True)
                 with cols[1]:
                     st.markdown(f"""
                     <div class="card">
@@ -675,11 +676,13 @@ else:
                             <h4>Request #{req_id} - {req_type}</h4>
                             <small>{timestamp}</small>
                         </div>
-                        <p><strong>Agent:</strong> {Agent}</p>
-                        <p><strong>Identifier:</strong> {ID}</p>
-                        <p><strong>Comment:</strong> {Comment}</p>
+                        <p><strong>Agent:</strong> {agent}</p>
+                        <p><strong>Identifier:</strong> {identifier}</p>
+                        <p><strong>Comment:</strong> {comment}</p>
                     </div>
                     """, unsafe_allow_html=True)
+
+
 
     # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
