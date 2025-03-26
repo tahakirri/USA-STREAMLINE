@@ -611,34 +611,67 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-    st.markdown(f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>", unsafe_allow_html=True)
+   st.markdown(f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>", unsafe_allow_html=True)
 
     # Requests Section
-   elif st.session_state.current_section == "requests":
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        if not is_killswitch_enabled():
-            with st.container():
-                st.markdown("### 📝 New Request")
-                with st.form("request_form"):
-                    request_type = st.selectbox("Type", ["Email", "Phone", "Ticket ID"])
-                    identifier = st.text_input("Identifier")
-                    comment = st.text_area("Details", height=150)
-                    
-                    if st.form_submit_button("Submit Request"):
-                        if identifier and comment:
-                            if add_request(st.session_state.username, request_type, identifier, comment):
-                                st.success("Request submitted!")
-        else:
-            st.warning("Submission disabled")
-    
-    with col2:
-        st.markdown("### 📋 Active Requests")
-        requests = get_requests()
+    if st.session_state.current_section == "requests":
+        col1, col2 = st.columns([1, 2])
         
-        if not requests:
-            st.markdown("<div class='card'>No active requests</div>", unsafe_allow_html=True)
+        with col1:
+            if not is_killswitch_enabled():
+                with st.container():
+                    st.markdown("### 📝 New Request")
+                    with st.form("request_form"):
+                        request_type = st.selectbox("Type", ["Email", "Phone", "Ticket ID"])
+                        identifier = st.text_input("Identifier")
+                        comment = st.text_area("Details", height=150)
+                        
+                        if st.form_submit_button("Submit Request"):
+                            if identifier and comment:
+                                if add_request(st.session_state.username, request_type, identifier, comment):
+                                    st.success("Request submitted!")
+            else:
+                st.warning("Submission disabled")
+        
+        with col2:
+            st.markdown("### 📋 Active Requests")
+            requests = get_requests()
+            
+            if not requests:
+                st.markdown("<div class='card'>No active requests</div>", unsafe_allow_html=True)
+            
+            for req in requests:
+                req_id, agent, req_type, identifier, comment, timestamp, completed = req
+                status = "completed" if completed else "pending"
+                
+                # Checkbox and status update
+                checkbox_state = st.checkbox(
+                    "Done",
+                    value=bool(completed),
+                    key=f"check_{req_id}",
+                    help="Mark request as completed",
+                    disabled=is_killswitch_enabled()
+                )
+                
+                if checkbox_state != bool(completed):
+                    update_request_status(req_id, checkbox_state)
+                    st.rerun()
+                
+                st.markdown(f"""
+                <div class='card'>
+                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
+                        <h3 style='margin: 0;'>#{req_id} - {req_type}</h3>
+                        <span class='status-indicator {"completed" if completed else "pending"}'>
+                            {'✅' if completed else '🔄'} {status.capitalize()}
+                        </span>
+                    </div>
+                    <p><strong>Identifier:</strong> {identifier}</p>
+                    <p><strong>Details:</strong> {comment}</p>
+                    <div style='color: #666; font-size: 0.9rem; margin-top: 1rem;'>
+                        {agent} • {timestamp.split()[0]}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
         
         for req in requests:
             req_id, agent, req_type, identifier, comment, timestamp, completed = req
