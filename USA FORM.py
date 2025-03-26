@@ -1135,7 +1135,15 @@ def admin_section():
                     st.rerun()
                 else:
                     st.error("Failed to activate killswitch")
-        st.markdown("---")
+        
+        # Fixed killswitch-active div
+        killswitch_html = '''
+        <div class="killswitch-active">
+            <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+            <p>The system is currently in read-only mode.</p>
+        </div>
+        '''
+        st.markdown(killswitch_html, unsafe_allow_html=True)
     
     skillset_management()
     user_management()
