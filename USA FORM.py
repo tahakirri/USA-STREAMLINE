@@ -37,15 +37,16 @@ def init_db():
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         
-        # Create tables with IF NOT EXISTS
+        # Users table (fixed syntax)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin'))
+                role TEXT CHECK(role IN ('agent', 'admin')))
         """)
         
+        # Requests table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,6 +58,7 @@ def init_db():
                 completed INTEGER DEFAULT 0)
         """)
         
+        # Mistakes table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +69,7 @@ def init_db():
                 timestamp TEXT)
         """)
         
+        # Group messages table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS group_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +79,7 @@ def init_db():
                 mentions TEXT)
         """)
         
+        # HOLD images table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS hold_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,7 +88,7 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        # System settings table with proper creation
+        # System settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
@@ -97,7 +101,7 @@ def init_db():
             VALUES (1, 0)
         """)
         
-        # Create default admin accounts
+        # Default admin accounts
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
