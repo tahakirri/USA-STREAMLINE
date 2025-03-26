@@ -4,7 +4,6 @@ import hashlib
 from datetime import datetime
 import os
 import re
-from streamlit.components.v1 import html
 from PIL import Image
 import io
 
@@ -248,6 +247,52 @@ def delete_user(user_id):
         if conn:
             conn.close()
 
+# New functions for clearing data
+def clear_all_requests():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM requests")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear requests: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM mistakes")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear mistakes: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM group_messages")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear group messages: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # Existing functions from previous implementation...
 def add_request(agent_name, request_type, identifier, comment):
     conn = None
@@ -469,7 +514,7 @@ else:
              f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
              f" {st.session_state.current_section.title()}")
 
-    # Requests Section (Previous implementation)
+    # Requests Section
     if st.session_state.current_section == "requests":
         with st.container():
             st.subheader("Submit a Request")
@@ -568,7 +613,7 @@ else:
             if st.form_submit_button("Send"):
                 if message:
                     if send_group_message(st.session_state.username, message):
-                        st.experimental_rerun()
+                        st.rerun()
 
     # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
@@ -598,11 +643,50 @@ else:
                 if st.button(f"Delete {username}", key=f"delete_{user_id}"):
                     if delete_user(user_id):
                         st.success(f"User {username} deleted!")
-                        st.experimental_rerun()
+                        st.rerun()
+        
+        # Data Management Section
+        st.markdown("---")
+        st.subheader("🗑️ Data Management")
+        
+        # Requests Clearing
+        st.markdown("#### Clear Requests")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All Requests", key="clear_requests"):
+                if clear_all_requests():
+                    st.success("All requests have been cleared!")
+                    st.rerun()
+        
+        # Mistakes Clearing
+        st.markdown("#### Clear Mistakes")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All Mistakes", key="clear_mistakes"):
+                if clear_all_mistakes():
+                    st.success("All mistakes have been cleared!")
+                    st.rerun()
+        
+        # Group Messages Clearing
+        st.markdown("#### Clear Group Messages")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All Group Messages", key="clear_group_messages"):
+                if clear_all_group_messages():
+                    st.success("All group messages have been cleared!")
+                    st.rerun()
+        
+        # HOLD Images Clearing
+        st.markdown("#### Clear HOLD Images")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All HOLD Images", key="clear_hold_images"):
+                if clear_hold_images():
+                    st.success("All HOLD images have been cleared!")
+                    st.rerun()
 
-    # HOLD Section (Previous implementation)
+    # HOLD Section
     elif st.session_state.current_section == "hold":
-        # [Previous HOLD section implementation remains the same]
         with st.container():
             st.subheader("Upload Image to HOLD")
             uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
@@ -613,7 +697,7 @@ else:
                 st.success("Image uploaded successfully!")
                 
                 # Display the uploaded image
-                st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
         
         st.subheader("Check HOLD Images")
         hold_images = get_hold_images()
@@ -634,7 +718,7 @@ else:
                     """, unsafe_allow_html=True)
                     
                     # Display the image
-                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_column_width=True)
+                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
         
         if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
             if clear_hold_images():
