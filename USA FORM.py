@@ -511,7 +511,7 @@ st.markdown("""
         border-right: 1px solid #e9ecef; 
     }
     .stButton>button {
-        background-color: #3b82f6;
+        background-color: #3b52f6;
         color: white;
         border-radius: 8px;
         padding: 0.5rem 1rem;
@@ -607,10 +607,10 @@ else:
         st.markdown("---")
         
         nav_options = [
-            ("📋 Requests", "requests"),
-            ("🖼️ HOLD", "hold"),
-            ("❌ Ticket Mistakes", "mistakes"),
-            ("💬 Group Chat", "chat")
+            ("📨 Requests", "requests"),
+            ("⏸️ HOLD ", "hold"),
+            ("⚠️ Ticket Errors", "mistakes"),
+            ("🗨️ Group Chat", "chat")
         ]
         
         if st.session_state.role == "admin":
