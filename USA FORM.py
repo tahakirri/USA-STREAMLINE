@@ -468,7 +468,7 @@ else:
     show_notifications()
 
     with st.sidebar:
-        st.title(f"👋 Welcome, {st.session_state.username}")
+        st.title(f"👋 Welcome, {st.session_state.username.title()}")
         st.markdown("---")
         
         nav_options = [
