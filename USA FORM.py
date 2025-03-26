@@ -247,6 +247,25 @@ def delete_user(user_id):
         if conn:
             conn.close()
 
+def update_user_password(user_id, new_password):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET password = ? 
+            WHERE id = ?
+        """, (hash_password(new_password), user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to update user password: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # New functions for clearing data
 def clear_all_requests():
     conn = None
@@ -639,11 +658,12 @@ else:
         
         # Send message form
         with st.form("chat_form"):
-            message = st.text_input("Type your message (use @username to mention)")
+            message = st.text_input("Type your message (use @username to mention)", key="chat_message")
             
             if st.form_submit_button("Send"):
                 if message:
                     if send_group_message(st.session_state.username, message):
+                        st.session_state.chat_message = ""  # Clear the message input
                         st.rerun()
         
         # Refresh chat button
@@ -669,12 +689,18 @@ else:
         st.subheader("Existing Users")
         users = get_all_users()
         for user_id, username, role in users:
-            cols = st.columns([0.6, 0.2, 0.2])
+            cols = st.columns([0.4, 0.2, 0.2, 0.2])
             with cols[0]:
                 st.write(f"**{username}**")
             with cols[1]:
                 st.write(role)
             with cols[2]:
+                new_password = st.text_input(f"New Password for {username}", type="password", key=f"new_pass_{user_id}")
+                if st.button(f"Update Password", key=f"update_pass_{user_id}"):
+                    if new_password:
+                        if update_user_password(user_id, new_password):
+                            st.success(f"Password for {username} updated!")
+            with cols[3]:
                 if st.button(f"Delete {username}", key=f"delete_{user_id}"):
                     if delete_user(user_id):
                         st.success(f"User {username} deleted!")
