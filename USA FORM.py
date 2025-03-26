@@ -580,12 +580,10 @@ else:
         """, unsafe_allow_html=True)
 
     with st.sidebar:
-        st.markdown(f"""
-        <div style='background: var(--background); padding: 1rem; border-radius: 10px; margin-bottom: 2rem;'>
-            <div style='font-size: 1.1rem; font-weight: 500;'>👤 {st.session_state.username}</div>
-            <div style='color: #666; font-size: 0.9rem;'>{st.session_state.role.capitalize()} Access</div>
-        </div>
-        """, unsafe_allow_html=True)
+       st.markdown(
+        f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>",
+        unsafe_allow_html=True
+    )
         
         nav_items = {
             "requests": ("📥", "Requests"),
