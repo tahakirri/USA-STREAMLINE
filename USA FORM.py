@@ -37,6 +37,7 @@ def init_db():
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         
+        # Users table (fixed syntax)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +46,7 @@ def init_db():
                 role TEXT CHECK(role IN ('agent', 'admin')))
         """)
         
+        # Requests table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +58,7 @@ def init_db():
                 completed INTEGER DEFAULT 0)
         """)
         
+        # Mistakes table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +69,7 @@ def init_db():
                 timestamp TEXT)
         """)
         
+        # Group messages table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS group_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +79,7 @@ def init_db():
                 mentions TEXT)
         """)
         
+        # HOLD images table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS hold_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,17 +88,20 @@ def init_db():
                 timestamp TEXT)
         """)
         
+        # System settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
         
+        # Initialize default settings
         cursor.execute("""
             INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
             VALUES (1, 0)
         """)
         
+        # Default admin accounts
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
@@ -111,16 +119,19 @@ def init_db():
         if conn:
             conn.close()
 
-def is_killswitch_enabled():  # ADD THIS FUNCTION EARLY
+def is_killswitch_enabled():
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
+        # Create table if not exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
+        
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
         result = cursor.fetchone()
         return bool(result[0]) if result else False
@@ -136,15 +147,27 @@ def toggle_killswitch(enable):
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
+        # Create table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                killswitch_enabled INTEGER DEFAULT 0)
+        """)
+        
+        # Ensure default record exists
         cursor.execute("""
             INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
             VALUES (1, 0)
         """)
+        
+        # Update the setting
         cursor.execute("""
             UPDATE system_settings 
             SET killswitch_enabled = ?
             WHERE id = 1
         """, (1 if enable else 0,))
+        
         conn.commit()
         return True
     except sqlite3.Error as e:
@@ -156,7 +179,7 @@ def toggle_killswitch(enable):
 
 def add_request(agent_name, request_type, identifier, comment):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -170,7 +193,7 @@ def add_request(agent_name, request_type, identifier, comment):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Request submission failed: {e}")
+        st.error(f"Failed to add request: {e}")
         return False
     finally:
         if conn:
@@ -181,10 +204,13 @@ def get_requests():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM requests ORDER BY timestamp DESC")
+        cursor.execute("""
+            SELECT * FROM requests 
+            ORDER BY timestamp DESC
+        """)
         return cursor.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Failed to load requests: {e}")
+        st.error(f"Failed to fetch requests: {e}")
         return []
     finally:
         if conn:
@@ -192,7 +218,7 @@ def get_requests():
 
 def update_request_status(request_id, completed):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -207,7 +233,7 @@ def update_request_status(request_id, completed):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Status update failed: {e}")
+        st.error(f"Failed to update request status: {e}")
         return False
     finally:
         if conn:
@@ -215,7 +241,7 @@ def update_request_status(request_id, completed):
 
 def add_mistake(team_leader, agent_name, ticket_id, error_description):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -229,7 +255,7 @@ def add_mistake(team_leader, agent_name, ticket_id, error_description):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Error reporting mistake: {e}")
+        st.error(f"Failed to add mistake: {e}")
         return False
     finally:
         if conn:
@@ -240,10 +266,13 @@ def get_mistakes():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM mistakes ORDER BY timestamp DESC")
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            ORDER BY timestamp DESC
+        """)
         return cursor.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Failed to load mistakes: {e}")
+        st.error(f"Failed to fetch mistakes: {e}")
         return []
     finally:
         if conn:
@@ -251,14 +280,16 @@ def get_mistakes():
 
 def send_group_message(sender, message):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
         mentions = re.findall(r'@(\w+)', message)
+        
         cursor.execute("""
             INSERT INTO group_messages (sender, message, timestamp, mentions) 
             VALUES (?, ?, ?, ?)
@@ -266,7 +297,7 @@ def send_group_message(sender, message):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Message send failed: {e}")
+        st.error(f"Failed to send message: {e}")
         return False
     finally:
         if conn:
@@ -277,10 +308,14 @@ def get_group_messages():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM group_messages ORDER BY timestamp DESC LIMIT 50")
+        cursor.execute("""
+            SELECT * FROM group_messages 
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """)
         return cursor.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Failed to load messages: {e}")
+        st.error(f"Failed to fetch group messages: {e}")
         return []
     finally:
         if conn:
@@ -294,7 +329,7 @@ def get_all_users():
         cursor.execute("SELECT id, username, role FROM users")
         return cursor.fetchall()
     except sqlite3.Error as e:
-        st.error(f"User load failed: {e}")
+        st.error(f"Failed to fetch users: {e}")
         return []
     finally:
         if conn:
@@ -302,7 +337,7 @@ def get_all_users():
 
 def add_user(username, password, role):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -316,7 +351,7 @@ def add_user(username, password, role):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"User creation failed: {e}")
+        st.error(f"Failed to add user: {e}")
         return False
     finally:
         if conn:
@@ -324,7 +359,7 @@ def add_user(username, password, role):
 
 def delete_user(user_id):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -335,7 +370,7 @@ def delete_user(user_id):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"User deletion failed: {e}")
+        st.error(f"Failed to delete user: {e}")
         return False
     finally:
         if conn:
@@ -343,7 +378,7 @@ def delete_user(user_id):
 
 def add_hold_image(uploader, image_data):
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -357,7 +392,7 @@ def add_hold_image(uploader, image_data):
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Image upload failed: {e}")
+        st.error(f"Failed to add HOLD image: {e}")
         return False
     finally:
         if conn:
@@ -368,10 +403,13 @@ def get_hold_images():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM hold_images ORDER BY timestamp DESC")
+        cursor.execute("""
+            SELECT * FROM hold_images 
+            ORDER BY timestamp DESC
+        """)
         return cursor.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Image load failed: {e}")
+        st.error(f"Failed to fetch HOLD images: {e}")
         return []
     finally:
         if conn:
@@ -379,7 +417,7 @@ def get_hold_images():
 
 def clear_hold_images():
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -390,7 +428,7 @@ def clear_hold_images():
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Image clearance failed: {e}")
+        st.error(f"Failed to clear HOLD images: {e}")
         return False
     finally:
         if conn:
@@ -398,7 +436,7 @@ def clear_hold_images():
 
 def clear_all_requests():
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -409,7 +447,7 @@ def clear_all_requests():
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Request clearance failed: {e}")
+        st.error(f"Failed to clear requests: {e}")
         return False
     finally:
         if conn:
@@ -417,7 +455,7 @@ def clear_all_requests():
 
 def clear_all_mistakes():
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -428,7 +466,7 @@ def clear_all_mistakes():
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Mistake clearance failed: {e}")
+        st.error(f"Failed to clear mistakes: {e}")
         return False
     finally:
         if conn:
@@ -436,7 +474,7 @@ def clear_all_mistakes():
 
 def clear_all_group_messages():
     if is_killswitch_enabled():
-        st.error("System locked. Contact administrator.")
+        st.error("System is currently locked. Please contact the developer.")
         return False
         
     conn = None
@@ -447,111 +485,99 @@ def clear_all_group_messages():
         conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Message clearance failed: {e}")
+        st.error(f"Failed to clear group messages: {e}")
         return False
     finally:
         if conn:
             conn.close()
 
 # --------------------------
-# Streamlit UI Configuration
+# Streamlit App Configuration
 # --------------------------
 
 st.set_page_config(
-    page_title="RMS Pro",
-    page_icon="⚙️",
+    page_title="Request Management System", 
+    page_icon=":office:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS
 st.markdown("""
 <style>
-    :root {
-        --primary: #2C3E50;
-        --secondary: #3498DB;
-        --background: #F8F9FA;
-        --card-bg: #FFFFFF;
-    }
-    
-    .stApp { background-color: var(--background); }
-    
+    .stApp { background-color: #f8f9fa; }
     [data-testid="stSidebar"] { 
-        background-color: var(--card-bg);
-        box-shadow: 2px 0 15px rgba(0,0,0,0.1);
+        background-color: #ffffff; 
+        border-right: 1px solid #e9ecef; 
     }
-    
     .stButton>button {
-        background-color: var(--secondary) !important;
-        border-radius: 8px !important;
-        transition: all 0.3s ease !important;
+        background-color: #3b82f6;
+        color: white;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
     }
-    
-    .stButton>button:hover {
-        opacity: 0.9;
-        transform: translateY(-1px);
-    }
-    
     .card {
-        background: var(--card-bg);
-        border-radius: 10px;
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        border-left: 4px solid var(--secondary);
+        margin-bottom: 1.5rem;
     }
-    
-    .status-indicator {
-        font-size: 0.9rem;
-        padding: 4px 12px;
-        border-radius: 20px;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+    .message {
+        max-width: 70%;
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        margin-bottom: 0.5rem;
     }
-    
-    .system-alert {
-        background: #FFEBEE;
-        border-left: 4px solid #D32F2F;
+    .sent {
+        background-color: #3b82f6;
+        color: white;
+        margin-left: auto;
+    }
+    .received {
+        background-color: #e9ecef;
+        margin-right: auto;
+    }
+    .killswitch-active {
+        background-color: #ffebee;
+        border-left: 5px solid #f44336;
         padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 6px;
+        margin-bottom: 1rem;
     }
-    
-    .mention-highlight {
-        background: #E3F2FD;
-        border-left: 4px solid #2196F3;
+    .killswitch-control {
+        background-color: #fff3e0;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# Initialize session state
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.role = None
     st.session_state.username = None
     st.session_state.current_section = "requests"
+    st.session_state.last_message_count = 0
 
+# Initialize database
 init_db()
 
-# --------------------------
-# Authentication Page
-# --------------------------
-
+# Login Page
 if not st.session_state.authenticated:
-    col1, col2, col3 = st.columns([1, 3, 1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; color: var(--primary);'>🔒 RMS Pro Login</h1>", unsafe_allow_html=True)
+        st.title("🏢 Request Management System")
+        st.markdown("---")
         
         with st.container():
-            st.markdown("""
-            <div style='background: var(--card-bg); padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'>
-                <h2 style='color: var(--primary); margin-bottom: 1.5rem;'>System Access</h2>
-            """, unsafe_allow_html=True)
-            
+            st.header("Login")
             with st.form("login_form"):
-                username = st.text_input("Username", placeholder="Enter credentials")
-                password = st.text_input("Password", type="password", placeholder="••••••••")
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
                 
-                if st.form_submit_button("Authenticate", use_container_width=True):
+                if st.form_submit_button("Login"):
                     if username and password:
                         role = authenticate(username, password)
                         if role:
@@ -562,364 +588,320 @@ if not st.session_state.authenticated:
                         else:
                             st.error("Invalid credentials")
                     else:
-                        st.warning("Both fields required")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
+                        st.warning("Please enter both username and password")
 
-# --------------------------
 # Main Application
-# --------------------------
-
 else:
+    # Display killswitch warning if active
     if is_killswitch_enabled():
         st.markdown("""
-        <div class='system-alert'>
-            <h3 style='margin: 0; color: #D32F2F;'>⚠️ System Lock Active</h3>
-            <p style='margin: 0.5rem 0 0;'>All modifications disabled. Contact administrator.</p>
+        <div class="killswitch-active">
+            <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+            <p>The system is currently in read-only mode. Please contact the developer for assistance.</p>
         </div>
         """, unsafe_allow_html=True)
 
+    # Sidebar Navigation
     with st.sidebar:
-       st.markdown(
-        f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>",
-        unsafe_allow_html=True
-    )
+        st.title(f"👋 Welcome, {st.session_state.username}")
+        st.markdown("---")
         
-         nav_items = {
-            "requests": ("📥", "Requests"),
-            "mistakes": ("⚠️", "Quality"),
-            "chat": ("💬", "Comms"),
-            "hold": ("🖼️", "Media"),
-            "admin": ("⚙️", "Admin")
-        }
+        nav_options = [
+            ("📋 Requests", "requests"),
+            ("🖼️ HOLD", "hold"),
+            ("❌ Ticket Mistakes", "mistakes"),
+            ("💬 Group Chat", "chat")
+        ]
         
-        if st.session_state.role != "admin":
-            del nav_items["admin"]
-            
-        for section, (icon, label) in nav_items.items():
-            if st.button(
-                f"{icon} {label}",
-                use_container_width=True,
-                key=f"nav_{section}"
-            ):
-                st.session_state.current_section = section
+        if st.session_state.role == "admin":
+            nav_options.append(("⚙️ Admin Panel", "admin"))
+        
+        for option, value in nav_options:
+            if st.button(option, key=f"nav_{value}"):
+                st.session_state.current_section = value
         
         st.markdown("---")
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚪 Logout"):
             st.session_state.authenticated = False
+            st.session_state.role = None
+            st.session_state.username = None
             st.rerun()
+    
+    # Main Content
+    st.title(f"{'📋' if st.session_state.current_section == 'requests' else ''}"
+             f"{'🖼️' if st.session_state.current_section == 'hold' else ''}"
+             f"{'❌' if st.session_state.current_section == 'mistakes' else ''}"
+             f"{'💬' if st.session_state.current_section == 'chat' else ''}"
+             f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
+             f" {st.session_state.current_section.title()}")
 
- st.markdown(
-    f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>",
-    unsafe_allow_html=True
-)
-
-
+    # Requests Section
     if st.session_state.current_section == "requests":
-        col1, col2 = st.columns([1, 2])
+        if not is_killswitch_enabled():
+            with st.container():
+                st.subheader("Submit a Request")
+                with st.form("request_form"):
+                    request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
+                    identifier = st.text_input("Identifier")
+                    comment = st.text_area("Comment")
+                    
+                    if st.form_submit_button("Submit Request"):
+                        if identifier and comment:
+                            if add_request(st.session_state.username, request_type, identifier, comment):
+                                st.success("Request submitted!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot submit new requests.")
         
-        with col1:
-            if not is_killswitch_enabled():
-                with st.container():
-                    st.markdown("### 📝 New Request")
-                    with st.form("request_form"):
-                        request_type = st.selectbox("Type", ["Email", "Phone", "Ticket ID"])
-                        identifier = st.text_input("Identifier")
-                        comment = st.text_area("Details", height=150)
-                        
-                        if st.form_submit_button("Submit Request"):
-                            if identifier and comment:
-                                if add_request(st.session_state.username, request_type, identifier, comment):
-                                    st.success("Request submitted!")
-            else:
-                st.warning("Submission disabled")
-        
-        with col2:
-            st.markdown("### 📋 Active Requests")
-            requests = get_requests()
-            
-            if not requests:
-                st.markdown("<div class='card'>No active requests</div>", unsafe_allow_html=True)
-            
-            for req in requests:
-                req_id, agent, req_type, identifier, comment, timestamp, completed = req
-                status = "completed" if completed else "pending"
-                
-                # Checkbox and status update
-                checkbox_state = st.checkbox(
-                    "Done",
-                    value=bool(completed),
-                    key=f"check_{req_id}",
-                    help="Mark request as completed",
-                    disabled=is_killswitch_enabled()
-                )
-                
-                if checkbox_state != bool(completed):
-                    update_request_status(req_id, checkbox_state)
-                    st.rerun()
-                
-                st.markdown(f"""
-                <div class='card'>
-                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                        <h3 style='margin: 0;'>#{req_id} - {req_type}</h3>
-                        <span class='status-indicator {"completed" if completed else "pending"}'>
-                            {'✅' if completed else '🔄'} {status.capitalize()}
-                        </span>
-                    </div>
-                    <p><strong>Identifier:</strong> {identifier}</p>
-                    <p><strong>Details:</strong> {comment}</p>
-                    <div style='color: #666; font-size: 0.9rem; margin-top: 1rem;'>
-                        {agent} • {timestamp.split()[0]}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        
+        st.subheader("All Requests")
+        requests = get_requests()
         for req in requests:
             req_id, agent, req_type, identifier, comment, timestamp, completed = req
-            status = "completed" if completed else "pending"
             
-            # Use a unique key for each checkbox
-            checkbox_state = st.checkbox(
-                "Done",
-                value=bool(completed),
-                key=f"check_{req_id}",
-                help="Mark request as completed",
-                disabled=is_killswitch_enabled()
-            )
-            
-            # Update status when checkbox changes
-            if checkbox_state != bool(completed):
-                if update_request_status(req_id, checkbox_state):
-                    st.rerun()
-            
-            st.markdown(f"""
-            <div class='card'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                    <h3 style='margin: 0;'>#{req_id} - {req_type}</h3>
-                    <span class='status-indicator {"completed" if completed else "pending"}'>
-                        {'✅' if completed else '🔄'} {status.capitalize()}
-                    </span>
-                </div>
-                <p><strong>Identifier:</strong> {identifier}</p>
-                <p><strong>Details:</strong> {comment}</p>
-                <div style='color: #666; font-size: 0.9rem; margin-top: 1rem;'>
-                    {agent} • {timestamp.split()[0]}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            for req in requests:
-                req_id, agent, req_type, identifier, comment, timestamp, completed = req
-                status = "completed" if completed else "pending"
-                
-                st.markdown(f"""
-                <div class='card'>
-                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                        <h3 style='margin: 0;'>#{req_id} - {req_type}</h3>
-                        <span class='status-indicator {"completed" if completed else "pending"}'>
-                            {'✅' if completed else '🔄'} {status.capitalize()}
-                        </span>
+            with st.container():
+                cols = st.columns([0.1, 0.9])
+                with cols[0]:
+                    if not is_killswitch_enabled():
+                        st.checkbox(
+                            "Done",
+                            value=bool(completed),
+                            key=f"check_{req_id}",
+                            on_change=update_request_status,
+                            args=(req_id, not completed))
+                    else:
+                        st.checkbox(
+                            "Done",
+                            value=bool(completed),
+                            key=f"check_{req_id}",
+                            disabled=True)
+                with cols[1]:
+                    st.markdown(f"""
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h4>Request #{req_id} - {req_type}</h4>
+                            <small>{timestamp}</small>
+                        </div>
+                        <p><strong>Agent:</strong> {agent}</p>
+                        <p><strong>Identifier:</strong> {identifier}</p>
+                        <p><strong>Comment:</strong> {comment}</p>
                     </div>
-                    <p><strong>Identifier:</strong> {identifier}</p>
-                    <p><strong>Details:</strong> {comment}</p>
-                    <div style='color: #666; font-size: 0.9rem; margin-top: 1rem;'>
-                        {agent} • {timestamp.split()[0]}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-    # Quality Section
+    # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
-        col1, col2 = st.columns([1, 2])
+        if not is_killswitch_enabled():
+            st.subheader("Report a Ticket Mistake")
+            with st.form("mistake_form"):
+                ticket_id = st.text_input("Ticket ID")
+                agent_name = st.text_input("Agent Name")
+                error_description = st.text_area("Error Description")
+                
+                if st.form_submit_button("Report Mistake"):
+                    if ticket_id and agent_name and error_description:
+                        if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
+                            st.success("Mistake reported successfully!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
         
-        with col1:
-            if not is_killswitch_enabled():
-                with st.container():
-                    st.markdown("### ⚠️ Report Issue")
-                    with st.form("mistake_form"):
-                        ticket_id = st.text_input("Ticket ID")
-                        agent_name = st.text_input("Agent Name")
-                        error_description = st.text_area("Description", height=150)
-                        
-                        if st.form_submit_button("Submit Report"):
-                            if ticket_id and agent_name and error_description:
-                                if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
-                                    st.success("Report submitted!")
-            else:
-                st.warning("Reporting disabled")
-        
-        with col2:
-            st.markdown("### 📋 Quality Log")
-            mistakes = get_mistakes()
-            
-            if not mistakes:
-                st.markdown("<div class='card'>No issues reported</div>", unsafe_allow_html=True)
-            
+        st.subheader("Ticket Mistakes Log")
+        mistakes = get_mistakes()
+        if mistakes:
             for mistake in mistakes:
                 mistake_id, team_leader, agent_name, ticket_id, error_desc, timestamp = mistake
-                
                 st.markdown(f"""
-                <div class='card'>
-                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                        <h3 style='margin: 0;'>Case #{mistake_id}</h3>
-                        <span style='color: #666; font-size: 0.9rem;'>{timestamp.split()[0]}</span>
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between;">
+                        <h4>Mistake #{mistake_id}</h4>
+                        <small>{timestamp}</small>
                     </div>
+                    <p><strong>Team Leader:</strong> {team_leader}</p>
                     <p><strong>Agent:</strong> {agent_name}</p>
                     <p><strong>Ticket ID:</strong> {ticket_id}</p>
-                    <p><strong>Description:</strong> {error_desc}</p>
-                    <div style='color: #666; font-size: 0.9rem; margin-top: 1rem;'>
-                        Reported by {team_leader}
-                    </div>
+                    <p><strong>Error Description:</strong> {error_desc}</p>
                 </div>
                 """, unsafe_allow_html=True)
+        else:
+            st.info("No mistakes reported.")
 
-    # Comms Section
+      # Group Chat Section
     elif st.session_state.current_section == "chat":
-        st.markdown("### 💬 Team Communications")
+        st.subheader("Group Chat")
         
+        # Display messages
         messages = get_group_messages()
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
             is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
             
             st.markdown(f"""
-            <div class='card {"mention-highlight" if is_mentioned else ""}'>
-                <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;'>
-                    <div style='font-weight: 500;'>{sender}</div>
-                    <small style='color: #666;'>{timestamp.split()[1]}</small>
-                </div>
-                <div style='color: #333;'>
-                    {re.sub(r'@(\w+)', r'<span style="color: #1976D2;">@\1</span>', message)}
-                </div>
+            <div class="message {'sent' if sender == st.session_state.username else 'received'}" 
+                 style="{'background-color: #3b82f6; color: white;' if is_mentioned else ''}">
+                <strong>{sender}</strong> {message}
+                <br><small>{timestamp}</small>
             </div>
             """, unsafe_allow_html=True)
         
+        # Send message form
         if not is_killswitch_enabled():
             with st.form("chat_form"):
-                message = st.text_input("Type message (use @mention)")
+                message = st.text_input("Type your message (use @username to mention)")
                 
-                if st.form_submit_button("Send", use_container_width=True):
+                if st.form_submit_button("Send"):
                     if message:
-                        send_group_message(st.session_state.username, message)
-                        st.rerun()
+                        if send_group_message(st.session_state.username, message):
+                            st.rerun()
         else:
-            st.warning("Messaging disabled")
+            st.warning("⚠️ System is currently locked. You cannot send messages.")
 
-    # Admin Section
+    # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-        tab1, tab2, tab3 = st.tabs(["👥 Users", "⚙️ System", "🗑️ Data"])
+        st.subheader("User Management")
         
-        with tab1:
-            st.markdown("### User Management")
+        # Killswitch control (only for Taha Kirri)
+        if st.session_state.username.lower() == "taha kirri":
+            st.markdown("---")
+            st.subheader("🚨 System Killswitch")
             
-            if not is_killswitch_enabled():
-                with st.expander("➕ Add User", expanded=True):
-                    with st.form("add_user_form"):
-                        new_username = st.text_input("Username")
-                        new_password = st.text_input("Password", type="password")
-                        new_role = st.selectbox("Role", ["agent", "admin"])
-                        
-                        if st.form_submit_button("Create User"):
-                            if new_username and new_password:
-                                add_user(new_username, new_password, new_role)
-                                st.rerun()
+            current_status = is_killswitch_enabled()
+            status_text = "🔴 ACTIVATED" if current_status else "🟢 DEACTIVATED"
+            st.markdown(f"### Current Status: {status_text}")
             
-            st.markdown("### Active Users")
-            users = get_all_users()
-            for user in users:
-                cols = st.columns([4, 2, 1])
-                cols[0].markdown(f"**{user[1]}**")
-                cols[1].markdown(f"`{user[2]}`")
-                if cols[2].button("Delete", key=f"del_{user[0]}"):
-                    delete_user(user[0])
-                    st.rerun()
-        
-        with tab2:
-            st.markdown("### System Controls")
-            
-            if st.session_state.username.lower() == "taha kirri":
-                current_status = is_killswitch_enabled()
-                
-                col1, col2 = st.columns(2)
-                col1.markdown(f"""
-                <div class='card'>
-                    <h3 style='margin: 0 0 1rem 0;'>System Status</h3>
-                    <div style='font-size: 1.5rem;'>
-                        {"🔴 Locked" if current_status else "🟢 Operational"}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                if current_status:
-                    if col2.button("🟢 Restore System", type="primary"):
-                        toggle_killswitch(False)
-                        st.rerun()
-                else:
-                    if col2.button("🔴 Activate Lock", type="secondary"):
-                        toggle_killswitch(True)
+            if current_status:
+                if st.button("🟢 Deactivate Killswitch"):
+                    if toggle_killswitch(False):
+                        st.success("Killswitch deactivated! System functions restored.")
                         st.rerun()
             else:
-                st.warning("Restricted access")
+                if st.button("🔴 Activate Killswitch"):
+                    if toggle_killswitch(True):
+                        st.success("Killswitch activated! All modification functions disabled.")
+                        st.rerun()
+            
+            st.markdown("---")
         
-        with tab3:
-            st.markdown("### Data Management")
-            st.markdown("<div class='system-alert'>⚠️ Irreversible actions</div>", unsafe_allow_html=True)
-            
-            cols = st.columns(2)
+        # Add User Form
+        if not is_killswitch_enabled():
+            with st.form("add_user_form"):
+                new_username = st.text_input("New Username")
+                new_password = st.text_input("Password", type="password")
+                new_role = st.selectbox("Role", ["agent", "admin"])
+                
+                if st.form_submit_button("Add User"):
+                    if new_username and new_password:
+                        if add_user(new_username, new_password, new_role):
+                            st.success(f"User {new_username} added successfully!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot add new users.")
+        
+        # User List
+        st.subheader("Existing Users")
+        users = get_all_users()
+        for user_id, username, role in users:
+            cols = st.columns([0.6, 0.2, 0.2])
             with cols[0]:
-                if st.button("Clear Requests"):
-                    clear_all_requests()
+                st.write(f"{username}")
             with cols[1]:
-                if st.button("Clear Quality Logs"):
-                    clear_all_mistakes()
-            
-            cols = st.columns(2)
-            with cols[0]:
-                if st.button("Clear Chat"):
-                    clear_all_group_messages()
-            with cols[1]:
-                if st.button("Clear Media"):
-                    clear_hold_images()
+                st.write(role)
+            with cols[2]:
+                if not is_killswitch_enabled():
+                    if st.button(f"Delete {username}", key=f"delete_{user_id}"):
+                        if delete_user(user_id):
+                            st.success(f"User {username} deleted!")
+                            st.rerun()
+                else:
+                    st.button(f"Delete {username}", key=f"delete_{user_id}", disabled=True)
+        
+        # Data Management Section
+        st.markdown("---")
+        st.subheader("🗑️ Data Management")
+        
+        # Requests Clearing
+        st.markdown("#### Clear Requests")
+        col1, col2 = st.columns(2)
+        with col1:
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Requests", key="clear_requests"):
+                    if clear_all_requests():
+                        st.success("All requests have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Requests", key="clear_requests", disabled=True)
+        
+        # Mistakes Clearing
+        st.markdown("#### Clear Mistakes")
+        col1, col2 = st.columns(2)
+        with col1:
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Mistakes", key="clear_mistakes"):
+                    if clear_all_mistakes():
+                        st.success("All mistakes have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Mistakes", key="clear_mistakes", disabled=True)
+        
+        # Group Messages Clearing
+        st.markdown("#### Clear Group Messages")
+        col1, col2 = st.columns(2)
+        with col1:
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Group Messages", key="clear_group_messages"):
+                    if clear_all_group_messages():
+                        st.success("All group messages have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Group Messages", key="clear_group_messages", disabled=True)
+        
+        # HOLD Images Clearing
+        st.markdown("#### Clear HOLD Images")
+        col1, col2 = st.columns(2)
+        with col1:
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All HOLD Images", key="clear_hold_images"):
+                    if clear_hold_images():
+                        st.success("All HOLD images have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All HOLD Images", key="clear_hold_images", disabled=True)
 
-    # Media Section
+    # HOLD Section
     elif st.session_state.current_section == "hold":
+        # Admin-only upload section
         if st.session_state.role == "admin":
             if not is_killswitch_enabled():
                 with st.container():
-                    st.markdown("### 📤 Upload Media")
-                    uploaded_file = st.file_uploader("Select file", type=["png", "jpg", "jpeg"])
+                    st.subheader("Upload Image to HOLD")
+                    uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
                     
-                    if uploaded_file and st.button("Confirm Upload"):
-                        image_data = uploaded_file.read()
-                        add_hold_image(st.session_state.username, image_data)
-                        st.rerun()
+                    if uploaded_image:
+                        image_data = uploaded_image.read()
+                        if add_hold_image(st.session_state.username, image_data):
+                            st.success("Image uploaded successfully!")
+                            st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
             else:
-                st.warning("Uploads disabled")
+                st.warning("⚠️ System is currently locked. You cannot upload images.")
         else:
-            st.warning("Administrator access required")
+            st.info("🔒 Only administrators can upload images to HOLD")
 
-        st.markdown("### 📥 Stored Media")
+        # Display section (visible to all)
+        st.subheader("Check HOLD Images")
         hold_images = get_hold_images()
         
-        if not hold_images:
-            st.markdown("<div class='card'>No media files</div>", unsafe_allow_html=True)
-        
-        for img in hold_images:
-            img_id, uploader, image_data, timestamp = img
-            try:
-                image = Image.open(io.BytesIO(image_data))
-                st.markdown(f"""
-                <div class='card'>
-                    <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
-                        <h3 style='margin: 0;'>Media #{img_id}</h3>
-                        <small style='color: #666;'>{timestamp.split()[0]}</small>
+        if hold_images:
+            for img in hold_images:
+                img_id, uploader, image_data, timestamp = img
+                with st.container():
+                    st.markdown(f"""
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h4>Image #{img_id}</h4>
+                            <small>{timestamp}</small>
+                        </div>
+                        <p><strong>Uploaded by:</strong> {uploader}</p>
                     </div>
-                    <p><strong>Uploaded by:</strong> {uploader}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.image(image, use_container_width=True)
-            except:
-                st.error(f"Error displaying image {img_id}")
+                    """, unsafe_allow_html=True)
+                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
+        else:
+            st.info("No images in HOLD")
 
+# Run the app
 if __name__ == "__main__":
-    st.write("System ready")
+    st.write("Request Management System")
