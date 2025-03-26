@@ -33,121 +33,141 @@ def init_db():
     try:
         cursor = conn.cursor()
         
-        # Users Table
+        # Enable foreign key support
+        cursor.execute("PRAGMA foreign_keys = ON")
+
+        # Create Users Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password TEXT,
-                role TEXT CHECK(role IN ('agent', 'team_leader', 'admin')),
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('agent', 'team_leader', 'admin')),
                 team_leader_id INTEGER,
-                FOREIGN KEY(team_leader_id) REFERENCES users(id))
+                FOREIGN KEY(team_leader_id) REFERENCES users(id)
+            )
         """)
-        
-        # Skillsets Table
+
+        # Create Skillsets Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS skillsets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE,
-                description TEXT)
+                name TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT ''
+            )
         """)
-        
-        # User-Skillset Mapping
+
+        # Create User-Skillset Mapping Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_skillsets (
-                user_id INTEGER,
-                skillset_id INTEGER,
+                user_id INTEGER NOT NULL,
+                skillset_id INTEGER NOT NULL,
                 PRIMARY KEY (user_id, skillset_id),
-                FOREIGN KEY(user_id) REFERENCES users(id),
-                FOREIGN KEY(skillset_id) REFERENCES skillsets(id))
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(skillset_id) REFERENCES skillsets(id) ON DELETE CASCADE
+            )
         """)
-        
-        # Requests Table
+
+        # Create Requests Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                request_type TEXT,
-                identifier TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                completed INTEGER DEFAULT 0)
+                agent_name TEXT NOT NULL,
+                request_type TEXT NOT NULL,
+                identifier TEXT NOT NULL,
+                comment TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                completed INTEGER DEFAULT 0
+            )
         """)
-        
-        # Mistakes Table
+
+        # Create Mistakes Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_leader TEXT,
-                agent_name TEXT,
-                ticket_id TEXT,
-                error_description TEXT,
-                timestamp TEXT)
+                team_leader TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                error_description TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )
         """)
-        
-        # Group Messages Table
+
+        # Create Group Messages Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS group_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT)
+                sender TEXT NOT NULL,
+                message TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                mentions TEXT
+            )
         """)
-        
-        # Hold Images Table
+
+        # Create Hold Images Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS hold_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uploader TEXT,
-                image_data BLOB,
-                timestamp TEXT)
+                uploader TEXT NOT NULL,
+                image_data BLOB NOT NULL,
+                timestamp TEXT NOT NULL
+            )
         """)
-        
-        # System Settings Table
+
+        # Create System Settings Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
-                killswitch_enabled INTEGER DEFAULT 0)
+                killswitch_enabled INTEGER DEFAULT 0
+            )
         """)
-        
-        # Breaks Table
+
+        # Create Breaks Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS breaks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                break_name TEXT,
-                start_time TEXT,
-                end_time TEXT,
-                max_users INTEGER,
+                break_name TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                max_users INTEGER NOT NULL,
                 current_users INTEGER DEFAULT 0,
-                created_by TEXT,
-                skillset_id INTEGER,
-                timestamp TEXT,
-                FOREIGN KEY(skillset_id) REFERENCES skillsets(id))
+                created_by TEXT NOT NULL,
+                skillset_id INTEGER NOT NULL,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY(skillset_id) REFERENCES skillsets(id)
+            )
         """)
-        
-        # Break Bookings Table
+
+        # Create Break Bookings Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS break_bookings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                break_id INTEGER,
-                user_id INTEGER,
-                username TEXT,
-                booking_date TEXT,
-                timestamp TEXT,
-                FOREIGN KEY(break_id) REFERENCES breaks(id))
+                break_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                booking_date TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY(break_id) REFERENCES breaks(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
         """)
-        
+
         # Initialize system settings
-        cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
-        
-        # Create default admin
         cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
+            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled)
+            VALUES (1, 0)
+        """)
+
+        # Create default admin user
+        cursor.execute("""
+            INSERT OR IGNORE INTO users (username, password, role)
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
-        
+
         conn.commit()
+    except sqlite3.Error as e:
+        print(f"Database initialization error: {str(e)}")
+        conn.rollback()
     finally:
         conn.close()
 # --------------------------
@@ -272,12 +292,20 @@ def get_all_users():
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT u.id, u.username, u.role, u.team_leader_id, tl.username as team_leader_name
+            SELECT 
+                u.id, 
+                u.username, 
+                u.role, 
+                u.team_leader_id, 
+                tl.username as team_leader_name
             FROM users u
             LEFT JOIN users tl ON u.team_leader_id = tl.id
             ORDER BY u.role, u.username
         """)
         return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {str(e)}")
+        return []
     finally:
         conn.close()
 
