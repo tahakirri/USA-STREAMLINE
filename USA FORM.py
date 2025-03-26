@@ -952,7 +952,121 @@ else:
                     st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
         else:
             st.info("No images in HOLD")
+def search_requests(query):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        query = f"%{query.lower()}%"
+        cursor.execute("""
+            SELECT * FROM requests 
+            WHERE LOWER(agent_name) LIKE ? 
+            OR LOWER(request_type) LIKE ? 
+            OR LOWER(identifier) LIKE ? 
+            OR LOWER(comment) LIKE ?
+            ORDER BY timestamp DESC
+        """, (query, query, query, query))
+        return cursor.fetchall()
+    finally:
+        conn.close()
+def search_mistakes(query):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        query = f"%{query.lower()}%"
+        cursor.execute("""
+            SELECT * FROM mistakes 
+            WHERE LOWER(agent_name) LIKE ? 
+            OR LOWER(ticket_id) LIKE ? 
+            OR LOWER(error_description) LIKE ?
+            ORDER BY timestamp DESC
+        """, (query, query, query))
+        return cursor.fetchall()
+    finally:
+        conn.close()
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.role = None
+    st.session_state.username = None
+    st.session_state.current_section = "requests"
+    st.session_state.last_request_count = 0
+    st.session_state.last_mistake_count = 0
+    st.session_state.last_message_count = 0
+    st.session_state.last_message_ids = []
+ def show_notifications():
+        current_requests = get_requests()
+        current_mistakes = get_mistakes()
+        current_messages = get_group_messages()
+        
+        # Request notifications
+        new_requests = len(current_requests) - st.session_state.last_request_count
+        if new_requests > 0 and st.session_state.last_request_count > 0:
+            st.toast(f"📋 {new_requests} new request(s) submitted!", icon="📋")
+        st.session_state.last_request_count = len(current_requests)
+        
+        # Mistake notifications
+        new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
+        if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
+            st.toast(f"❌ {new_mistakes} new mistake(s) reported!", icon="❌")
+        st.session_state.last_mistake_count = len(current_mistakes)
+        
+        # Message notifications
+        current_message_ids = [msg[0] for msg in current_messages]
+        new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
+        for msg in new_messages:
+            if msg[1] != st.session_state.username:
+                mentions = msg[4].split(',') if msg[4] else []
+                if st.session_state.username in mentions:
+                    st.toast(f"💬 You were mentioned by {msg[1]}!", icon="💬")
+                else:
+                    st.toast(f"💬 New message from {msg[1]}!", icon="💬")
+        st.session_state.last_message_ids = current_message_ids
 
+    show_notifications()
+  pending_requests = len([r for r in get_requests() if not r[6]])
+        new_mistakes = len(get_mistakes())
+        unread_messages = len([m for m in get_group_messages() 
+                             if m[0] not in st.session_state.last_message_ids 
+                             and m[1] != st.session_state.username])
+        
+        st.markdown(f"""
+        <div style="margin-bottom: 20px;">
+            <h4>🔔 Notifications</h4>
+            <p>📋 Pending requests: {pending_requests}</p>
+            <p>❌ Recent mistakes: {new_mistakes}</p>
+            <p>💬 Unread messages: {unread_messages}</p>
+        </div>
+        """, unsafe_allow_html=True)
+ st.subheader("📊 Request Dashboard")
+        col1, col2, col3, col4 = st.columns(4)
+        total_requests = len(requests)
+        completed = sum(1 for r in requests if r[6])
+        
+        with col1:
+            st.markdown('<div class="metric-card"><h3>Total</h3><h1>{}</h1></div>'.format(total_requests), unsafe_allow_html=True)
+        with col2:
+            st.markdown('<div class="metric-card"><h3>Completed</h3><h1 style="color:#4CAF50;">{}</h1></div>'.format(completed), unsafe_allow_html=True)
+        with col3:
+            st.markdown('<div class="metric-card"><h3>Pending</h3><h1 style="color:#F44336;">{}</h1></div>'.format(total_requests - completed), unsafe_allow_html=True)
+        with col4:
+            st.markdown('<div class="metric-card"><h3>Completion</h3><h1>{}%</h1></div>'.format(
+                round((completed/total_requests)*100) if total_requests > 0 else 0), unsafe_allow_html=True)
+        
+        # Visualization
+        df = pd.DataFrame({
+            'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in requests],
+            'Status': ['Completed' if r[6] else 'Pending' for r in requests]
+        })
+        fig = px.histogram(df, x='Date', color='Status', barmode='group')
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Request List
+        st.subheader("All Requests")
+        for req in requests:
+            # ... (Keep existing request display code) ...
+
+    elif st.session_state.current_section == "mistakes":
+        st.title("❌ Ticket Mistakes")
+        
 # Run the app
 if __name__ == "__main__":
     st.write("Request Management System")
