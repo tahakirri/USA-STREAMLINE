@@ -7,7 +7,13 @@ import re
 from PIL import Image
 import io
 
-# Fancy Number Checker Function
+# Initialize session state variables if they don't exist
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
+    st.session_state.current_section = 'requests'
+
 def is_fancy_number(phone_number):
     """
     Determine if a phone number is 'fancy' based on various patterns
@@ -73,10 +79,25 @@ def is_fancy_number(phone_number):
         "reason": "Standard phone number"
     }
 
-# [Rest of the previous database and authentication functions remain the same]
+def login_page():
+    """Login page for authentication"""
+    st.title("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    
+    if st.button("Login"):
+        # Add your authentication logic here
+        # For now, a dummy authentication
+        if username and password:
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.session_state.role = "admin" if username == "admin" else "user"
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
 
-# Modify the sidebar navigation and main content sections
-else:
+def main_app():
+    """Main application for authenticated users"""
     # Sidebar Navigation
     with st.sidebar:
         st.title(f"👋 Welcome, {st.session_state.username}")
@@ -84,7 +105,7 @@ else:
         
         nav_options = [
             ("📋 Requests", "requests"),
-            ("📱 Fancy Number", "fancy_number"),  # New navigation option
+            ("📱 Fancy Number", "fancy_number"),
         ]
         
         if st.session_state.role == "admin":
@@ -154,4 +175,13 @@ else:
                 else:
                     st.warning("Please enter a complete phone number")
 
-    # [Rest of the previous code remains the same]
+def app():
+    """Main application flow"""
+    if not st.session_state.authenticated:
+        login_page()
+    else:
+        main_app()
+
+# Run the application
+if __name__ == "__main__":
+    app()
