@@ -104,8 +104,8 @@ def init_db():
             )
         """)
         
-        # Only create the taha kirri admin account
-        cursor.execute("""
+        # Default admin accounts
+         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
@@ -680,10 +680,8 @@ else:
                     st.success("All HOLD images have been cleared!")
                     st.rerun()
 
-  # HOLD Section
-elif st.session_state.current_section == "hold":
-    # Only show upload form for admin (taha kirri)
-    if st.session_state.username == "taha kirri":
+    # HOLD Section
+    elif st.session_state.current_section == "hold":
         with st.container():
             st.subheader("Upload Image to HOLD")
             uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
@@ -695,32 +693,31 @@ elif st.session_state.current_section == "hold":
                 
                 # Display the uploaded image
                 st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
-    
-    st.subheader("Check HOLD Images")
-    hold_images = get_hold_images()
-    
-    if hold_images:
-        for img in hold_images:
-            img_id, uploader, image_data, timestamp = img
-            
-            with st.container():
-                st.markdown(f"""
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between;">
-                        <h4>Image #{img_id}</h4>
-                        <small>{timestamp}</small>
-                    </div>
-                    <p><strong>Uploaded by:</strong> {uploader}</p>
-                </div>
-                """, unsafe_allow_html=True)
+        
+        st.subheader("Check HOLD Images")
+        hold_images = get_hold_images()
+        
+        if hold_images:
+            for img in hold_images:
+                img_id, uploader, image_data, timestamp = img
                 
-                # Display the image
-                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
-    
-    # Only show clear button for taha kirri
-    if st.session_state.username == "taha kirri" and st.button("🗑️ Clear All HOLD Images"):
-        if clear_hold_images():
-            st.success("All HOLD images cleared!")
+                with st.container():
+                    st.markdown(f"""
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h4>Image #{img_id}</h4>
+                            <small>{timestamp}</small>
+                        </div>
+                        <p><strong>Uploaded by:</strong> {uploader}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display the image
+                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
+        
+        if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
+            if clear_hold_images():
+                st.success("All HOLD images cleared!")
 
 # Run the app
 if _name_ == "_main_":
