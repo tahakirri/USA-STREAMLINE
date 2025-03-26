@@ -685,8 +685,8 @@ else:
                     st.success("All HOLD images have been cleared!")
                     st.rerun()
 
-  # HOLD Section
-elif st.session_state.current_section == "hold":
+# HOLD Section
+if st.session_state.current_section == "hold":  # Changed from `elif` to `if`
     # Admin-only upload section
     if st.session_state.role == "admin":
         with st.container():
