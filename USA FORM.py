@@ -508,10 +508,10 @@ st.markdown("""
     .stApp { background-color: #f8f9fa; }
     [data-testid="stSidebar"] { 
         background-color: #ffffff; 
-        border-right: 1px solid #8860D0; 
+        border-right: 1px solid #e9ecef; 
     }
     .stButton>button {
-        background-color: #FF8E8E;
+        background-color: #3b82f6;
         color: white;
         border-radius: 8px;
         padding: 0.5rem 1rem;
@@ -597,7 +597,7 @@ else:
         st.markdown("""
         <div class="killswitch-active">
             <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-            <p>The system is currently in read-only mode. Please contact the developer for assistance.</p>
+            <p> Please contact the developer for assistance.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -607,10 +607,10 @@ else:
         st.markdown("---")
         
         nav_options = [
-            ("📨 Requests", "requests"),
-            ("⏸️ HOLD ", "hold"),
-            ("⚠️ Ticket Errors", "mistakes"),
-            ("🗨️ Group Chat", "chat")
+            ("📋 Requests", "requests"),
+            ("🖼️ HOLD", "hold"),
+            ("❌ Ticket Mistakes", "mistakes"),
+            ("💬 Group Chat", "chat")
         ]
         
         if st.session_state.role == "admin":
