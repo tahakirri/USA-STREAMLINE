@@ -628,7 +628,7 @@ else:
                         send_group_message(st.session_state.username, message)
                         st.rerun()
 
-  elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+   elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
     st.subheader("Admin Panel")  # This line MUST be indented
      
         st.markdown("---")
