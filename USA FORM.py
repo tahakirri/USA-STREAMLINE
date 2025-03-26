@@ -15,7 +15,7 @@ import pandas as pd
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def authenticate(username, password):
+def authenticate(name, password):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
@@ -689,6 +689,69 @@ else:
                 st.image(Image.open(io.BytesIO(data)), use_column_width=True)
         else:
             st.info("No images in HOLD")
+elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+    # ... (existing user management code) ...
 
+    # Data Management Section - Add this after User Management
+    st.markdown("---")
+    st.subheader("🗑️ Data Management")
+    
+    # Clear Requests
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🧹 Clear All Requests", help="Permanently delete all request records"):
+            if not is_killswitch_enabled():
+                if clear_all_requests():
+                    st.success("All requests cleared successfully!")
+                    st.rerun()
+            else:
+                st.error("System is locked - cannot clear requests")
+
+    # Clear Mistakes
+    with col2:
+        if st.button("🧹 Clear All Mistakes", help="Permanently delete all mistake records"):
+            if not is_killswitch_enabled():
+                if clear_all_mistakes():
+                    st.success("All mistakes cleared successfully!")
+                    st.rerun()
+            else:
+                st.error("System is locked - cannot clear mistakes")
+
+    # Clear Chat Messages
+    col3, col4 = st.columns(2)
+    with col3:
+        if st.button("🧹 Clear Chat History", help="Permanently delete all chat messages"):
+            if not is_killswitch_enabled():
+                if clear_all_group_messages():
+                    st.success("Chat history cleared successfully!")
+                    st.rerun()
+            else:
+                st.error("System is locked - cannot clear chats")
+
+    # Clear HOLD Images
+    with col4:
+        if st.button("🧹 Clear HOLD Images", help="Permanently delete all uploaded images"):
+            if not is_killswitch_enabled():
+                if clear_hold_images():
+                    st.success("HOLD images cleared successfully!")
+                    st.rerun()
+            else:
+                st.error("System is locked - cannot clear images")
+
+    # Danger Zone
+    st.markdown("---")
+    st.subheader("🔥 Nuclear Options")
+    if st.button("💣 DELETE ALL DATA", help="WARNING: Permanent deletion of ALL system data"):
+        if st.session_state.username.lower() == "taha kirri":
+            if st.checkbox("I understand this will delete EVERYTHING"):
+                if st.button("CONFIRM TOTAL WIPE"):
+                    clear_all_requests()
+                    clear_all_mistakes()
+                    clear_all_group_messages()
+                    clear_hold_images()
+                    st.error("All system data has been permanently deleted!")
+                    st.rerun()
+        else:
+            st.error("Only system developer can access this function")
 if __name__ == "__main__":
     st.write("Request Management System")
