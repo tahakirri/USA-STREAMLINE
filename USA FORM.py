@@ -448,9 +448,31 @@ if "authenticated" not in st.session_state:
     st.session_state.username = None
     st.session_state.current_section = "requests"
     st.session_state.last_message_count = 0
+    st.session_state.last_request_count = 0
 
 # Initialize database
 init_db()
+
+# Function to send browser notifications
+def send_notification(title, message):
+    st.markdown(f"""
+    <script>
+        const notify = () => {{
+            if (!("Notification" in window)) {{
+                console.log("This browser does not support desktop notification");
+            }} else if (Notification.permission === "granted") {{
+                new Notification("{title}", {{ body: "{message}" }});
+            }} else if (Notification.permission !== "denied") {{
+                Notification.requestPermission().then((permission) => {{
+                    if (permission === "granted") {{
+                        new Notification("{title}", {{ body: "{message}" }});
+                    }}
+                }});
+            }}
+        }};
+        notify();
+    </script>
+    """, unsafe_allow_html=True)
 
 # Login Page
 if not st.session_state.authenticated:
@@ -527,9 +549,14 @@ else:
                     if identifier and comment:
                         if add_request(st.session_state.username, request_type, identifier, comment):
                             st.success("Request submitted!")
+                            send_notification("New Request", "A new request has been submitted.")
         
         st.subheader("All Requests")
         requests = get_requests()
+        if len(requests) > st.session_state.last_request_count:
+            send_notification("New Request", "A new request has been added.")
+            st.session_state.last_request_count = len(requests)
+        
         for req in requests:
             req_id, agent, req_type, identifier, comment, timestamp, completed = req
             
@@ -594,6 +621,10 @@ else:
         
         # Display messages
         messages = get_group_messages()
+        if len(messages) > st.session_state.last_message_count:
+            send_notification("New Message", "A new message has been added to the group chat.")
+            st.session_state.last_message_count = len(messages)
+        
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
             is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
@@ -614,6 +645,10 @@ else:
                 if message:
                     if send_group_message(st.session_state.username, message):
                         st.rerun()
+        
+        # Refresh chat button
+        if st.button("🔄 Refresh Chat"):
+            st.rerun()
 
     # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
@@ -710,7 +745,6 @@ else:
                     st.markdown(f"""
                     <div class="card">
                         <div style="display: flex; justify-content: space-between;">
-                            <h4>Image #{img_id}</h4>
                             <small>{timestamp}</small>
                         </div>
                         <p><strong>Uploaded by:</strong> {uploader}</p>
@@ -718,7 +752,7 @@ else:
                     """, unsafe_allow_html=True)
                     
                     # Display the image
-                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
+                    st.image(Image.open(io.BytesIO(image_data)), use_container_width=True)
         
         if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
             if clear_hold_images():
