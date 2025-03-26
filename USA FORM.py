@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import re
 from PIL import Image
@@ -20,10 +20,10 @@ def authenticate(username, password):
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute("SELECT id, role FROM users WHERE username = ? AND password = ?", 
+        cursor.execute("SELECT role FROM users WHERE username = ? AND password = ?", 
                       (username, hashed_password))
         result = cursor.fetchone()
-        return result if result else None
+        return result[0] if result else None
     finally:
         conn.close()
 
@@ -39,15 +39,6 @@ def init_db():
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin')))
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS active_logins (
-                user_id INTEGER,
-                username TEXT,
-                login_time TEXT,
-                last_activity TEXT,
-                FOREIGN KEY(user_id) REFERENCES users(id))
         """)
         
         cursor.execute("""
@@ -375,45 +366,6 @@ def clear_all_group_messages():
     finally:
         conn.close()
 
-def update_last_activity(user_id):
-    conn = sqlite3.connect("data/requests.db")
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE active_logins 
-            SET last_activity = ?
-            WHERE user_id = ?
-        """, (datetime.now().isoformat(), user_id))
-        conn.commit()
-    finally:
-        conn.close()
-
-def get_active_logins():
-    conn = sqlite3.connect("data/requests.db")
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT username, login_time, last_activity 
-            FROM active_logins 
-            WHERE last_activity > datetime('now', '-30 minutes')
-            ORDER BY last_activity DESC
-        """)
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-def remove_inactive_sessions():
-    conn = sqlite3.connect("data/requests.db")
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            DELETE FROM active_logins 
-            WHERE last_activity <= datetime('now', '-30 minutes')
-        """)
-        conn.commit()
-    finally:
-        conn.close()
-
 # --------------------------
 # Streamlit App
 # --------------------------
@@ -446,7 +398,6 @@ if "authenticated" not in st.session_state:
     st.session_state.update({
         "authenticated": False,
         "role": None,
-        "user_id": None,  # Ensure user_id exists
         "username": None,
         "current_section": "requests",
         "last_request_count": 0,
@@ -465,27 +416,11 @@ if not st.session_state.authenticated:
             password = st.text_input("Password", type="password")
             if st.form_submit_button("Login"):
                 if username and password:
-                    auth_result = authenticate(username, password)
-                    if auth_result:
-                        user_id, role = auth_result
-                        conn = sqlite3.connect("data/requests.db")
-                        try:
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT INTO active_logins (user_id, username, login_time, last_activity)
-                                VALUES (?, ?, ?, ?)
-                            """, (user_id, username, 
-                                 datetime.now().isoformat(), 
-                                 datetime.now().isoformat()))
-                            conn.commit()
-                        finally:
-                            conn.close()
-                        
-                        # Update session state properly
+                    role = authenticate(username, password)
+                    if role:
                         st.session_state.update({
                             "authenticated": True,
                             "role": role,
-                            "user_id": user_id,  # Make sure to set user_id
                             "username": username,
                             "last_request_count": len(get_requests()),
                             "last_mistake_count": len(get_mistakes()),
@@ -496,23 +431,6 @@ if not st.session_state.authenticated:
                         st.error("Invalid credentials")
 
 else:
-    # Add safety check for user_id
-    if not st.session_state.user_id:
-        st.error("Session error - please log out and log back in")
-        st.stop()
-    
-    # Update activity tracking
-    try:
-        update_last_activity(st.session_state.user_id)
-        remove_inactive_sessions()
-    except Exception as e:
-        st.error(f"Activity tracking error: {str(e)}")
-        st.stop()
-
-else:
-    update_last_activity(st.session_state.user_id)
-    remove_inactive_sessions()
-
     if is_killswitch_enabled():
         st.markdown("""
         <div class="killswitch-active">
@@ -584,14 +502,6 @@ else:
         """, unsafe_allow_html=True)
         
         if st.button("🚪 Logout"):
-            conn = sqlite3.connect("data/requests.db")
-            try:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM active_logins WHERE user_id = ?", 
-                             (st.session_state.user_id,))
-                conn.commit()
-            finally:
-                conn.close()
             st.session_state.authenticated = False
             st.rerun()
 
@@ -738,26 +648,6 @@ else:
                     st.rerun()
             st.markdown("---")
         
-        st.subheader("👥 Active Logins")
-        active_logins = get_active_logins()
-        
-        if active_logins:
-            for login in active_logins:
-                username, login_time, last_activity = login
-                login_dt = datetime.fromisoformat(login_time)
-                last_dt = datetime.fromisoformat(last_activity)
-                
-                st.markdown(f"""
-                <div class="card" style="margin-bottom: 1rem;">
-                    <h4>{username}</h4>
-                    <p>🕒 Login Time: {login_dt.strftime("%Y-%m-%d %H:%M:%S")}</p>
-                    <p>⏳ Last Activity: {last_dt.strftime("%Y-%m-%d %H:%M:%S")}</p>
-                    <p>⌛ Active Duration: {str(last_dt - login_dt).split('.')[0]}</p>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No active logins in the past 30 minutes")
-        
         st.subheader("🧹 Data Management")
         
         with st.expander("❌ Clear All Requests"):
@@ -852,5 +742,5 @@ else:
         else:
             st.info("No images in HOLD")
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     st.write("Request Management System")
