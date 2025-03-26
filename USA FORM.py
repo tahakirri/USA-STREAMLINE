@@ -55,7 +55,6 @@ def init_db():
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin'))
-            )
         """)
         
         # Requests table
@@ -67,8 +66,7 @@ def init_db():
                 identifier TEXT,
                 comment TEXT,
                 timestamp TEXT,
-                completed INTEGER DEFAULT 0
-            )
+                completed INTEGER DEFAULT 0)
         """)
         
         # Mistakes table
@@ -79,8 +77,7 @@ def init_db():
                 agent_name TEXT,
                 ticket_id TEXT,
                 error_description TEXT,
-                timestamp TEXT
-            )
+                timestamp TEXT)
         """)
         
         # Group messages table
@@ -90,8 +87,7 @@ def init_db():
                 sender TEXT,
                 message TEXT,
                 timestamp TEXT,
-                mentions TEXT
-            )
+                mentions TEXT)
         """)
         
         # HOLD images table
@@ -100,8 +96,20 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 uploader TEXT,
                 image_data BLOB,
-                timestamp TEXT
-            )
+                timestamp TEXT)
+        """)
+        
+        # System settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                killswitch_enabled INTEGER DEFAULT 0)
+        """)
+        
+        # Insert default settings
+        cursor.execute("""
+            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
+            VALUES (1, 0)
         """)
         
         # Default admin accounts
@@ -122,8 +130,46 @@ def init_db():
         if conn:
             conn.close()
 
+def is_killswitch_enabled():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    except sqlite3.Error as e:
+        st.error(f"Error checking killswitch: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def toggle_killswitch(enable):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE system_settings 
+            SET killswitch_enabled = ?
+            WHERE id = 1
+        """, (1 if enable else 0,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Error toggling killswitch: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # Mistakes Section Functions
 def add_mistake(team_leader, agent_name, ticket_id, error_description):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -160,6 +206,10 @@ def get_mistakes():
 
 # Group Chat Functions
 def send_group_message(sender, message):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -215,6 +265,10 @@ def get_all_users():
             conn.close()
 
 def add_user(username, password, role):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -233,6 +287,10 @@ def add_user(username, password, role):
             conn.close()
 
 def delete_user(user_id):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -249,6 +307,10 @@ def delete_user(user_id):
 
 # New functions for clearing data
 def clear_all_requests():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -264,6 +326,10 @@ def clear_all_requests():
             conn.close()
 
 def clear_all_mistakes():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -279,6 +345,10 @@ def clear_all_mistakes():
             conn.close()
 
 def clear_all_group_messages():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -293,8 +363,12 @@ def clear_all_group_messages():
         if conn:
             conn.close()
 
-# Existing functions from previous implementation...
+# Request Functions
 def add_request(agent_name, request_type, identifier, comment):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -330,6 +404,10 @@ def get_requests():
             conn.close()
 
 def update_request_status(request_id, completed):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -340,13 +418,20 @@ def update_request_status(request_id, completed):
             WHERE id = ?
         """, (1 if completed else 0, request_id))
         conn.commit()
+        return True
     except sqlite3.Error as e:
         st.error(f"Failed to update request status: {e}")
+        return False
     finally:
         if conn:
             conn.close()
 
+# HOLD Functions
 def add_hold_image(uploader, image_data):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -356,8 +441,10 @@ def add_hold_image(uploader, image_data):
             VALUES (?, ?, ?)
         """, (uploader, image_data, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
+        return True
     except sqlite3.Error as e:
         st.error(f"Failed to add HOLD image: {e}")
+        return False
     finally:
         if conn:
             conn.close()
@@ -380,6 +467,10 @@ def get_hold_images():
             conn.close()
 
 def clear_hold_images():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect("data/requests.db")
@@ -438,6 +529,12 @@ st.markdown("""
         background-color: #e9ecef;
         margin-right: auto;
     }
+    .killswitch-active {
+        background-color: #ffebee;
+        border-left: 5px solid #f44336;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -480,6 +577,15 @@ if not st.session_state.authenticated:
 
 # Main Application
 else:
+    # Display killswitch warning if active
+    if is_killswitch_enabled():
+        st.markdown("""
+        <div class="killswitch-active">
+            <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+            <p>The system is currently in read-only mode. Please contact the developer for assistance.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
     # Sidebar Navigation
     with st.sidebar:
         st.title(f"👋 Welcome, {st.session_state.username}")
@@ -516,17 +622,20 @@ else:
 
     # Requests Section
     if st.session_state.current_section == "requests":
-        with st.container():
-            st.subheader("Submit a Request")
-            with st.form("request_form"):
-                request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
-                identifier = st.text_input("Identifier")
-                comment = st.text_area("Comment")
-                
-                if st.form_submit_button("Submit Request"):
-                    if identifier and comment:
-                        if add_request(st.session_state.username, request_type, identifier, comment):
-                            st.success("Request submitted!")
+        if not is_killswitch_enabled():
+            with st.container():
+                st.subheader("Submit a Request")
+                with st.form("request_form"):
+                    request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
+                    identifier = st.text_input("Identifier")
+                    comment = st.text_area("Comment")
+                    
+                    if st.form_submit_button("Submit Request"):
+                        if identifier and comment:
+                            if add_request(st.session_state.username, request_type, identifier, comment):
+                                st.success("Request submitted!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot submit new requests.")
         
         st.subheader("All Requests")
         requests = get_requests()
@@ -536,12 +645,19 @@ else:
             with st.container():
                 cols = st.columns([0.1, 0.9])
                 with cols[0]:
-                    st.checkbox(
-                        "Done",
-                        value=bool(completed),
-                        key=f"check_{req_id}",
-                        on_change=update_request_status,
-                        args=(req_id, not completed))
+                    if not is_killswitch_enabled():
+                        st.checkbox(
+                            "Done",
+                            value=bool(completed),
+                            key=f"check_{req_id}",
+                            on_change=update_request_status,
+                            args=(req_id, not completed))
+                    else:
+                        st.checkbox(
+                            "Done",
+                            value=bool(completed),
+                            key=f"check_{req_id}",
+                            disabled=True)
                 with cols[1]:
                     st.markdown(f"""
                     <div class="card">
@@ -557,16 +673,19 @@ else:
 
     # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
-        st.subheader("Report a Ticket Mistake")
-        with st.form("mistake_form"):
-            ticket_id = st.text_input("Ticket ID")
-            agent_name = st.text_input("Agent Name")
-            error_description = st.text_area("Error Description")
-            
-            if st.form_submit_button("Report Mistake"):
-                if ticket_id and agent_name and error_description:
-                    if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
-                        st.success("Mistake reported successfully!")
+        if not is_killswitch_enabled():
+            st.subheader("Report a Ticket Mistake")
+            with st.form("mistake_form"):
+                ticket_id = st.text_input("Ticket ID")
+                agent_name = st.text_input("Agent Name")
+                error_description = st.text_area("Error Description")
+                
+                if st.form_submit_button("Report Mistake"):
+                    if ticket_id and agent_name and error_description:
+                        if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
+                            st.success("Mistake reported successfully!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
         
         st.subheader("Ticket Mistakes Log")
         mistakes = get_mistakes()
@@ -607,28 +726,56 @@ else:
             """, unsafe_allow_html=True)
         
         # Send message form
-        with st.form("chat_form"):
-            message = st.text_input("Type your message (use @username to mention)")
-            
-            if st.form_submit_button("Send"):
-                if message:
-                    if send_group_message(st.session_state.username, message):
-                        st.rerun()
+        if not is_killswitch_enabled():
+            with st.form("chat_form"):
+                message = st.text_input("Type your message (use @username to mention)")
+                
+                if st.form_submit_button("Send"):
+                    if message:
+                        if send_group_message(st.session_state.username, message):
+                            st.rerun()
+        else:
+            st.warning("⚠️ System is currently locked. You cannot send messages.")
 
     # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
         st.subheader("User Management")
         
-        # Add User Form
-        with st.form("add_user_form"):
-            new_username = st.text_input("New Username")
-            new_password = st.text_input("Password", type="password")
-            new_role = st.selectbox("Role", ["agent", "admin"])
+        # Killswitch control (only for Taha Kirri)
+        if st.session_state.username.lower() == "taha kirri":
+            st.markdown("---")
+            st.subheader("🚨 System Killswitch")
             
-            if st.form_submit_button("Add User"):
-                if new_username and new_password:
-                    if add_user(new_username, new_password, new_role):
-                        st.success(f"User {new_username} added successfully!")
+            current_status = is_killswitch_enabled()
+            status_text = "🔴 ACTIVATED" if current_status else "🟢 DEACTIVATED"
+            st.markdown(f"### Current Status: {status_text}")
+            
+            if current_status:
+                if st.button("🟢 Deactivate Killswitch"):
+                    if toggle_killswitch(False):
+                        st.success("Killswitch deactivated! System functions restored.")
+                        st.rerun()
+            else:
+                if st.button("🔴 Activate Killswitch"):
+                    if toggle_killswitch(True):
+                        st.success("Killswitch activated! All modification functions disabled.")
+                        st.rerun()
+            
+            st.markdown("---")
+        
+        # Add User Form
+        if not is_killswitch_enabled():
+            with st.form("add_user_form"):
+                new_username = st.text_input("New Username")
+                new_password = st.text_input("Password", type="password")
+                new_role = st.selectbox("Role", ["agent", "admin"])
+                
+                if st.form_submit_button("Add User"):
+                    if new_username and new_password:
+                        if add_user(new_username, new_password, new_role):
+                            st.success(f"User {new_username} added successfully!")
+        else:
+            st.warning("⚠️ System is currently locked. You cannot add new users.")
         
         # User List
         st.subheader("Existing Users")
@@ -640,10 +787,13 @@ else:
             with cols[1]:
                 st.write(role)
             with cols[2]:
-                if st.button(f"Delete {username}", key=f"delete_{user_id}"):
-                    if delete_user(user_id):
-                        st.success(f"User {username} deleted!")
-                        st.rerun()
+                if not is_killswitch_enabled():
+                    if st.button(f"Delete {username}", key=f"delete_{user_id}"):
+                        if delete_user(user_id):
+                            st.success(f"User {username} deleted!")
+                            st.rerun()
+                else:
+                    st.button(f"Delete {username}", key=f"delete_{user_id}", disabled=True)
         
         # Data Management Section
         st.markdown("---")
@@ -653,77 +803,90 @@ else:
         st.markdown("#### Clear Requests")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All Requests", key="clear_requests"):
-                if clear_all_requests():
-                    st.success("All requests have been cleared!")
-                    st.rerun()
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Requests", key="clear_requests"):
+                    if clear_all_requests():
+                        st.success("All requests have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Requests", key="clear_requests", disabled=True)
         
         # Mistakes Clearing
         st.markdown("#### Clear Mistakes")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All Mistakes", key="clear_mistakes"):
-                if clear_all_mistakes():
-                    st.success("All mistakes have been cleared!")
-                    st.rerun()
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Mistakes", key="clear_mistakes"):
+                    if clear_all_mistakes():
+                        st.success("All mistakes have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Mistakes", key="clear_mistakes", disabled=True)
         
         # Group Messages Clearing
         st.markdown("#### Clear Group Messages")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All Group Messages", key="clear_group_messages"):
-                if clear_all_group_messages():
-                    st.success("All group messages have been cleared!")
-                    st.rerun()
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All Group Messages", key="clear_group_messages"):
+                    if clear_all_group_messages():
+                        st.success("All group messages have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All Group Messages", key="clear_group_messages", disabled=True)
         
         # HOLD Images Clearing
         st.markdown("#### Clear HOLD Images")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All HOLD Images", key="clear_hold_images"):
-                if clear_hold_images():
-                    st.success("All HOLD images have been cleared!")
-                    st.rerun()
+            if not is_killswitch_enabled():
+                if st.button("🗑️ Clear All HOLD Images", key="clear_hold_images"):
+                    if clear_hold_images():
+                        st.success("All HOLD images have been cleared!")
+                        st.rerun()
+            else:
+                st.button("🗑️ Clear All HOLD Images", key="clear_hold_images", disabled=True)
 
-# HOLD Section
-if st.session_state.current_section == "hold":
-    # Admin-only upload section
-    if st.session_state.role == "admin":
-        with st.container():
-            st.subheader("Upload Image to HOLD")
-            uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
-            
-            if uploaded_image:
-                image_data = uploaded_image.read()
-                add_hold_image(st.session_state.username, image_data)
-                st.success("Image uploaded successfully!")
-                st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)  # Fixed here
-    else:
-        st.info("🔒 Only administrators can upload images to HOLD")
+    # HOLD Section
+    elif st.session_state.current_section == "hold":
+        # Admin-only upload section
+        if st.session_state.role == "admin":
+            if not is_killswitch_enabled():
+                with st.container():
+                    st.subheader("Upload Image to HOLD")
+                    uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
+                    
+                    if uploaded_image:
+                        image_data = uploaded_image.read()
+                        if add_hold_image(st.session_state.username, image_data):
+                            st.success("Image uploaded successfully!")
+                            st.image(uploaded_image, caption="Uploaded Image", use_container_width=True)
+            else:
+                st.warning("⚠️ System is currently locked. You cannot upload images.")
+        else:
+            st.info("🔒 Only administrators can upload images to HOLD")
 
-    # Display section (visible to all)
-    st.subheader("Check HOLD Images")
-    hold_images = get_hold_images()
-    
-    if hold_images:
-        for img in hold_images:
-            img_id, uploader, image_data, timestamp = img
-            with st.container():
-                st.markdown(f"""
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between;">
-                        <h4>Image #{img_id}</h4>
-                        <small>{timestamp}</small>
+        # Display section (visible to all)
+        st.subheader("Check HOLD Images")
+        hold_images = get_hold_images()
+        
+        if hold_images:
+            for img in hold_images:
+                img_id, uploader, image_data, timestamp = img
+                with st.container():
+                    st.markdown(f"""
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h4>Image #{img_id}</h4>
+                            <small>{timestamp}</small>
+                        </div>
+                        <p><strong>Uploaded by:</strong> {uploader}</p>
                     </div>
-                    <p><strong>Uploaded by:</strong> {uploader}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)  # Fixed here
+                    """, unsafe_allow_html=True)
+                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
+        else:
+            st.info("No images in HOLD")
 
-    # Admin-only clear button
-    if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
-        if clear_hold_images():
-            st.success("All HOLD images cleared!")
 # Run the app
 if __name__ == "__main__":
     st.write("Request Management System")
