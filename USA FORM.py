@@ -446,7 +446,7 @@ if "authenticated" not in st.session_state:
     st.session_state.update({
         "authenticated": False,
         "role": None,
-        "user_id": None,
+        "user_id": None,  # Ensure user_id exists
         "username": None,
         "current_section": "requests",
         "last_request_count": 0,
@@ -481,10 +481,11 @@ if not st.session_state.authenticated:
                         finally:
                             conn.close()
                         
+                        # Update session state properly
                         st.session_state.update({
                             "authenticated": True,
                             "role": role,
-                            "user_id": user_id,
+                            "user_id": user_id,  # Make sure to set user_id
                             "username": username,
                             "last_request_count": len(get_requests()),
                             "last_mistake_count": len(get_mistakes()),
@@ -493,6 +494,20 @@ if not st.session_state.authenticated:
                         st.rerun()
                     else:
                         st.error("Invalid credentials")
+
+else:
+    # Add safety check for user_id
+    if not st.session_state.user_id:
+        st.error("Session error - please log out and log back in")
+        st.stop()
+    
+    # Update activity tracking
+    try:
+        update_last_activity(st.session_state.user_id)
+        remove_inactive_sessions()
+    except Exception as e:
+        st.error(f"Activity tracking error: {str(e)}")
+        st.stop()
 
 else:
     update_last_activity(st.session_state.user_id)
