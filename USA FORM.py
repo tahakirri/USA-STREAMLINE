@@ -37,16 +37,15 @@ def init_db():
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
         
-        # Users table
+        # Create tables with IF NOT EXISTS
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin')))
+                role TEXT CHECK(role IN ('agent', 'admin'))
         """)
         
-        # Requests table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +57,6 @@ def init_db():
                 completed INTEGER DEFAULT 0)
         """)
         
-        # Mistakes table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS mistakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +67,6 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        # Group messages table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS group_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,7 +76,6 @@ def init_db():
                 mentions TEXT)
         """)
         
-        # HOLD images table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS hold_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,7 +84,7 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        # System settings table for killswitch
+        # System settings table with proper creation
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
@@ -101,7 +97,7 @@ def init_db():
             VALUES (1, 0)
         """)
         
-        # Default admin accounts
+        # Create default admin accounts
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
@@ -124,6 +120,14 @@ def is_killswitch_enabled():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
+        # Create table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                killswitch_enabled INTEGER DEFAULT 0)
+        """)
+        
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
         result = cursor.fetchone()
         return bool(result[0]) if result else False
@@ -139,11 +143,27 @@ def toggle_killswitch(enable):
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
+        # Create table if not exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                killswitch_enabled INTEGER DEFAULT 0)
+        """)
+        
+        # Ensure default record exists
+        cursor.execute("""
+            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
+            VALUES (1, 0)
+        """)
+        
+        # Update the setting
         cursor.execute("""
             UPDATE system_settings 
             SET killswitch_enabled = ?
             WHERE id = 1
         """, (1 if enable else 0,))
+        
         conn.commit()
         return True
     except sqlite3.Error as e:
