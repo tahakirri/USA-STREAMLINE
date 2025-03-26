@@ -611,9 +611,10 @@ else:
             st.session_state.authenticated = False
             st.rerun()
 
-   st.markdown(f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>", unsafe_allow_html=True)
+  st.markdown(
+    f"<h1 style='color: var(--primary);'>{nav_items[st.session_state.current_section][0]} {nav_items[st.session_state.current_section][1]}</h1>",
+    unsafe_allow_html=True)
 
-    # Requests Section
     if st.session_state.current_section == "requests":
         col1, col2 = st.columns([1, 2])
         
