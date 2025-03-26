@@ -15,7 +15,7 @@ import pandas as pd
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def authenticate(name, password):
+def authenticate(username, password):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
@@ -628,12 +628,12 @@ else:
                         send_group_message(st.session_state.username, message)
                         st.rerun()
 
-   elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-    st.subheader("Admin Panel")  # This line MUST be indented
-     
-        st.markdown("---")
+    elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+        if st.session_state.username.lower() == "taha kirri":
+             st.markdown("---")
         st.subheader("🧹 Data Management")
-         # Clear Requests
+        
+        # Clear Requests
         with st.expander("❌ Clear All Requests"):
             with st.form("clear_requests_form"):
                 st.warning("This will permanently delete ALL requests!")
@@ -703,40 +703,42 @@ else:
                             st.error(f"Error during deletion: {str(e)}")
                     else:
                         st.error("Confirmation text does not match")
-    # System Killswitch (Developer Only)
-    if st.session_state.username.lower() == "taha kirri":
-        st.markdown("---")
-        st.subheader("🚨 System Killswitch")
-        current_status = is_killswitch_enabled()
-        
-        col1, col2 = st.columns(2)
-        if current_status:
-            if col1.button("🟢 Deactivate Killswitch"):
-                toggle_killswitch(False)
-                st.rerun()
-        else:
-            if col1.button("🔴 Activate Killswitch"):
-                toggle_killswitch(True)
-                st.rerun()
-                
-        st.markdown(f"**Current Status:** {'🔴 Active' if current_status else '🟢 Inactive'}")
-
-    # User Management
-    st.markdown("---")
-    st.subheader("👥 User Management")
-    
-    # Add User Form
-    with st.expander("➕ Add New User", expanded=True):
-        with st.form("add_user_form"):
-            new_user = st.text_input("Username")
-            new_pass = st.text_input("Password", type="password")
-            new_role = st.selectbox("Role", ["agent", "admin"])
             
-            if st.form_submit_button("Create User"):
-                if new_user and new_pass:
-                    if add_user(new_user, new_pass, new_role):
-                        st.success("User created successfully!")
+            st.subheader("🚨 System Killswitch")
+            current = is_killswitch_enabled()
+            status = "🔴 ACTIVE" if current else "🟢 INACTIVE"
+            st.write(f"Current Status: {status}")
+            
+            col1, col2 = st.columns(2)
+            if current:
+                if col1.button("Deactivate Killswitch"):
+                    toggle_killswitch(False)
+                    st.rerun()
+            else:
+                if col1.button("Activate Killswitch"):
+                    toggle_killswitch(True)
+                    st.rerun()
+        
+        st.subheader("User Management")
+        if not is_killswitch_enabled():
+            with st.form("add_user"):
+                user = st.text_input("Username")
+                pwd = st.text_input("Password", type="password")
+                role = st.selectbox("Role", ["agent", "admin"])
+                if st.form_submit_button("Add User"):
+                    if user and pwd:
+                        add_user(user, pwd, role)
                         st.rerun()
+        
+        st.subheader("Existing Users")
+        users = get_all_users()
+        for uid, uname, urole in users:
+            cols = st.columns([3, 1, 1])
+            cols[0].write(uname)
+            cols[1].write(urole)
+            if cols[2].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
+                delete_user(uid)
+                st.rerun()
 
     elif st.session_state.current_section == "hold":
         if st.session_state.role == "admin" and not is_killswitch_enabled():
@@ -761,69 +763,6 @@ else:
                 st.image(Image.open(io.BytesIO(data)), use_column_width=True)
         else:
             st.info("No images in HOLD")
-elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-    # ... (existing user management code) ...
 
-    # Data Management Section - Add this after User Management
-    st.markdown("---")
-    st.subheader("🗑️ Data Management")
-    
-    # Clear Requests
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🧹 Clear All Requests", help="Permanently delete all request records"):
-            if not is_killswitch_enabled():
-                if clear_all_requests():
-                    st.success("All requests cleared successfully!")
-                    st.rerun()
-            else:
-                st.error("System is locked - cannot clear requests")
-
-    # Clear Mistakes
-    with col2:
-        if st.button("🧹 Clear All Mistakes", help="Permanently delete all mistake records"):
-            if not is_killswitch_enabled():
-                if clear_all_mistakes():
-                    st.success("All mistakes cleared successfully!")
-                    st.rerun()
-            else:
-                st.error("System is locked - cannot clear mistakes")
-
-    # Clear Chat Messages
-    col3, col4 = st.columns(2)
-    with col3:
-        if st.button("🧹 Clear Chat History", help="Permanently delete all chat messages"):
-            if not is_killswitch_enabled():
-                if clear_all_group_messages():
-                    st.success("Chat history cleared successfully!")
-                    st.rerun()
-            else:
-                st.error("System is locked - cannot clear chats")
-
-    # Clear HOLD Images
-    with col4:
-        if st.button("🧹 Clear HOLD Images", help="Permanently delete all uploaded images"):
-            if not is_killswitch_enabled():
-                if clear_hold_images():
-                    st.success("HOLD images cleared successfully!")
-                    st.rerun()
-            else:
-                st.error("System is locked - cannot clear images")
-
-    # Danger Zone
-    st.markdown("---")
-    st.subheader("🔥 Nuclear Options")
-    if st.button("💣 DELETE ALL DATA", help="WARNING: Permanent deletion of ALL system data"):
-        if st.session_state.username.lower() == "taha kirri":
-            if st.checkbox("I understand this will delete EVERYTHING"):
-                if st.button("CONFIRM TOTAL WIPE"):
-                    clear_all_requests()
-                    clear_all_mistakes()
-                    clear_all_group_messages()
-                    clear_hold_images()
-                    st.error("All system data has been permanently deleted!")
-                    st.rerun()
-        else:
-            st.error("Only system developer can access this function")
 if __name__ == "__main__":
     st.write("Request Management System")
