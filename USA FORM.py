@@ -33,7 +33,29 @@ def init_db():
     try:
         cursor = conn.cursor()
         
-        # Users Table
+        # Drop existing tables (for development only)
+        cursor.execute("DROP TABLE IF EXISTS users")
+        cursor.execute("DROP TABLE IF EXISTS skillsets")
+        cursor.execute("DROP TABLE IF EXISTS user_skillsets")
+        cursor.execute("DROP TABLE IF EXISTS requests")
+        cursor.execute("DROP TABLE IF EXISTS mistakes")
+        cursor.execute("DROP TABLE IF EXISTS group_messages")
+        cursor.execute("DROP TABLE IF EXISTS hold_images")
+        cursor.execute("DROP TABLE IF EXISTS system_settings")
+        cursor.execute("DROP TABLE IF EXISTS breaks")
+        cursor.execute("DROP TABLE IF EXISTS break_bookings")
+
+        # Create fresh tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password TEXT,
+                role TEXT CHECK(role IN ('agent', 'team_leader', 'admin')),
+                team_leader_id INTEGER,
+                FOREIGN KEY(team_leader_id) REFERENCES users(id))
+        """)
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,7 +161,7 @@ def init_db():
         """)
         
         # Initialize system settings
-        cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
+       cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
         
         # Create default admin
         cursor.execute("""
