@@ -1329,11 +1329,11 @@ def main():
     else:
         if is_killswitch_enabled():
             st.markdown("""
-            <div class="killswitch-active">
-                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-                <p>The system is currently in read-only mode.</p>
-            </div>
-            """, unsafe_allow_html=True)
+<div class="killswitch-active">
+    <h3>&#x26A0; SYSTEM LOCKED &#x26A0;</h3>
+    <p>The system is currently in read-only mode.</p>
+</div>
+""", unsafe_allow_html=True)
         
         show_notifications()
         render_sidebar()
