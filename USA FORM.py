@@ -1126,24 +1126,20 @@ def admin_section():
                 if toggle_killswitch(False):
                     st.success("Killswitch deactivated!")
                     st.rerun()
-                else:
-                    st.error("Failed to deactivate killswitch")
+            # Killswitch active display
+            st.markdown('''
+                <div class="killswitch-active">
+                    <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+                    <p>The system is currently in read-only mode.</p>
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
         else:
             if col1.button("Activate Killswitch"):
                 if toggle_killswitch(True):
                     st.success("Killswitch activated!")
                     st.rerun()
-                else:
-                    st.error("Failed to activate killswitch")
-        
-        # Use a variable for the HTML content
-        if current:
-            st.markdown('''
-            <div class="killswitch-active">
-                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-                <p>The system is currently in read-only mode.</p>
-            </div>
-            ''', unsafe_allow_html=True)
     
     skillset_management()
     user_management()
