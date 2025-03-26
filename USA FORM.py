@@ -33,7 +33,7 @@ def init_db():
     try:
         cursor = conn.cursor()
         
-        # Users Table with team leader relationship
+        # Users Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,7 +111,7 @@ def init_db():
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
         
-        # Breaks Table (modified with skillset_id)
+        # Breaks Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS breaks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -446,7 +446,7 @@ def clear_all_break_bookings():
         conn.close()
 
 # --------------------------
-# Other System Functions (unchanged from original)
+# Other System Functions
 # --------------------------
 
 def is_killswitch_enabled():
@@ -1090,6 +1090,7 @@ def chat_section():
     for msg in reversed(messages):
         msg_id, sender, message, ts, mentions = msg
         is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+        st.markdown(f"""
         <div class="message {'sent' if sender == st.session_state.username else 'received'}"
             style="{'background-color: #3b82f6' if is_mentioned else ''}">
             <strong>{sender}</strong>: {message}<br>
@@ -1132,11 +1133,10 @@ def admin_section():
                     st.success("Killswitch activated!")
                     st.rerun()
         
-        # Fixed killswitch message using f-string and escaped characters
         if current:
-            st.markdown(f'''
+            st.markdown('''
             <div class="killswitch-active">
-                <h3>{"⚠️"} SYSTEM LOCKED {"⚠️"}</h3>
+                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
                 <p>The system is currently in read-only mode.</p>
             </div>
             ''', unsafe_allow_html=True)
@@ -1207,7 +1207,6 @@ def user_management():
             
             if st.form_submit_button("Add User"):
                 if username and password:
-                    # Convert skillset names to IDs
                     skillset_ids = []
                     for name in selected_skillsets:
                         for s in available_skillsets:
@@ -1215,7 +1214,6 @@ def user_management():
                                 skillset_ids.append(s[0])
                                 break
                     
-                    # Convert team leader selection to ID
                     tl_id = None
                     if team_leader:
                         tl_id = int(team_leader.split("ID: ")[1].rstrip(")"))
@@ -1238,7 +1236,6 @@ def user_management():
                 if tl_name:
                     cols[0].write(f"Team Leader: {tl_name}")
                 
-                # Show assigned skillsets
                 skillsets = get_user_skillsets(u_id)
                 if skillsets:
                     cols[0].write("Skillsets:")
@@ -1332,12 +1329,12 @@ def main():
         login_section()
     else:
         if is_killswitch_enabled():
-            st.markdown("""
-<div class="killswitch-active">
-    <h3>&#x26A0; SYSTEM LOCKED &#x26A0;</h3>
-    <p>The system is currently in read-only mode.</p>
-</div>
-""", unsafe_allow_html=True)
+            st.markdown('''
+            <div class="killswitch-active">
+                <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+                <p>The system is currently in read-only mode.</p>
+            </div>
+            ''', unsafe_allow_html=True)
         
         show_notifications()
         render_sidebar()
