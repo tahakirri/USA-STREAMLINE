@@ -141,7 +141,7 @@ def update_request_status(request_id, completed):
             UPDATE requests 
             SET completed=? 
             WHERE id=?
-        """, (completed, request_id))
+        """, (int(completed), request_id))
         conn.commit()
     except sqlite3.Error as e:
         st.error(f"Failed to update request status: {e}")
@@ -338,130 +338,80 @@ def show_notification(message):
 # Streamlit UI
 # --------------------------
 
+# Set page config with your preferred settings
 st.set_page_config(
-    page_title="Request Management System",
+    page_title="Request Management System", 
+    page_icon=":office:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern interface
+# Add custom CSS for styling
 st.markdown("""
 <style>
-    /* Main layout */
-    .main-container {
-        display: flex;
-        min-height: 100vh;
+    /* Main app background */
+    .stApp {
+        background-color: #f8f9fa;
     }
     
     /* Sidebar styling */
-    .sidebar {
-        width: 250px;
-        background-color: #f8f9fa;
-        border-right: 1px solid #e9ecef;
-        padding: 1rem;
-    }
-    
-    /* Content area */
-    .content {
-        flex: 1;
-        padding: 2rem;
+    [data-testid="stSidebar"] {
         background-color: #ffffff;
+        border-right: 1px solid #e9ecef;
     }
     
-    /* Login page */
-    .login-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background-color: #f8f9fa;
-    }
-    
-    .login-box {
-        width: 400px;
-        padding: 2rem;
-        background-color: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-    
-    /* Message styling */
-    .message-container {
-        max-height: 60vh;
-        overflow-y: auto;
-        padding: 1rem;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
-    
-    .message {
-        margin-bottom: 1rem;
-        padding: 0.75rem;
-        border-radius: 8px;
-        max-width: 80%;
-    }
-    
-    .received {
-        background-color: #f1f3f5;
-        align-self: flex-start;
-    }
-    
-    .sent {
-        background-color: #1976d2;
+    /* Button styling */
+    .stButton>button {
+        background-color: #3b82f6;
         color: white;
-        align-self: flex-end;
-        margin-left: auto;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background-color: #2563eb;
+        transform: translateY(-1px);
     }
     
-    .timestamp {
-        font-size: 0.75rem;
-        color: #6c757d;
-        margin-top: 0.25rem;
+    /* Input field styling */
+    .stTextInput>div>div>input, 
+    .stSelectbox>div>div>select, 
+    .stTextArea>div>div>textarea {
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        padding: 0.5rem;
     }
     
-    .mention {
-        color: #1976d2;
-        font-weight: bold;
-    }
-    
-    /* Card styling */
+    /* Card-like containers */
     .card {
         background-color: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         padding: 1.5rem;
         margin-bottom: 1.5rem;
     }
     
-    /* Form elements */
-    .form-group {
-        margin-bottom: 1rem;
+    /* Message bubbles */
+    .message {
+        max-width: 70%;
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        margin-bottom: 0.5rem;
     }
-    
-    /* Button styling */
-    .btn {
-        padding: 0.5rem 1rem;
-        border-radius: 4px;
-        border: none;
-        cursor: pointer;
-        font-weight: 500;
-    }
-    
-    .btn-primary {
-        background-color: #1976d2;
+    .sent {
+        background-color: #3b82f6;
         color: white;
+        margin-left: auto;
     }
-    
-    /* Badge for unread messages */
-    .badge {
-        display: inline-block;
-        padding: 0.25rem 0.5rem;
+    .received {
+        background-color: #e9ecef;
+        margin-right: auto;
+    }
+    .timestamp {
         font-size: 0.75rem;
-        border-radius: 50%;
-        background-color: #1976d2;
-        color: white;
-        margin-left: 0.5rem;
+        color: #6b7280;
+        text-align: right;
+        margin-top: 0.25rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -473,97 +423,96 @@ if "authenticated" not in st.session_state:
     st.session_state.username = None
     st.session_state.last_message_count = 0
     st.session_state.last_request_count = 0
-    st.session_state.current_section = "request"
+    st.session_state.current_section = "requests"
 
 # Initialize database
 init_db()
 
-# Login page
+# Login Page
 if not st.session_state.authenticated:
-    st.markdown("""
-    <div class="login-container">
-        <div class="login-box">
-            <h2 style="text-align: center; margin-bottom: 1.5rem;">Request Management System</h2>
-            <h3 style="text-align: center; margin-bottom: 2rem;">Login</h3>
-    """, unsafe_allow_html=True)
-    
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+    # Center the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("🏢 Request Management System")
+        st.markdown("---")
         
-        if st.form_submit_button("Login"):
-            if username and password:
-                role = authenticate(username, password)
-                if role:
-                    st.session_state.authenticated = True
-                    st.session_state.role = role
-                    st.session_state.username = username
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials")
-            else:
-                st.warning("Please enter both username and password")
-    
-    st.markdown("""
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        with st.container():
+            st.header("Login")
+            with st.form("login_form"):
+                username = st.text_input("Username", placeholder="Enter your username")
+                password = st.text_input("Password", type="password", placeholder="Enter your password")
+                
+                if st.form_submit_button("Login"):
+                    if username and password:
+                        role = authenticate(username, password)
+                        if role:
+                            st.session_state.authenticated = True
+                            st.session_state.role = role
+                            st.session_state.username = username
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+                    else:
+                        st.warning("Please enter both username and password")
+
+# Main Application
 else:
-    # Main application layout
-    st.markdown("""
-    <div class="main-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <h3 style="margin-bottom: 1.5rem;">Welcome, {username}</h3>
-    """.format(username=st.session_state.username), unsafe_allow_html=True)
-    
-    # Sidebar navigation
+    # Sidebar Navigation
     with st.sidebar:
-        unread_count = len(get_group_messages())
-        badge = f'<span class="badge">{unread_count}</span>' if unread_count > 0 else ""
+        st.title(f"👋 Welcome, {st.session_state.username}")
+        st.markdown("---")
         
+        # Navigation options
         nav_options = [
-            ("📋 Request", "request"),
+            ("📋 Requests", "requests"),
             ("🖼️ HOLD", "hold"),
             ("❌ Ticket Mistakes", "mistakes"),
-            (f"💬 Group Chat{badge}", "chat")
+            ("💬 Group Chat", "chat")
         ]
         
         if st.session_state.role == "admin":
-            nav_options.append(("⚙ Admin Panel", "admin"))
+            nav_options.append(("⚙️ Admin Panel", "admin"))
         
+        # Display navigation buttons
         for option, value in nav_options:
             if st.button(option, key=f"nav_{value}"):
                 st.session_state.current_section = value
-    
-    st.markdown("""
-        </div>
         
-        <!-- Main content -->
-        <div class="content">
-    """, unsafe_allow_html=True)
+        st.markdown("---")
+        if st.button("🚪 Logout"):
+            st.session_state.authenticated = False
+            st.session_state.role = None
+            st.session_state.username = None
+            st.rerun()
     
-    # Request Section
-    if st.session_state.current_section == "request":
-        st.markdown("<h2 style='margin-bottom: 1.5rem;'>Submit a Request</h2>", unsafe_allow_html=True)
-        
-        with st.form("request_form"):
-            request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
-            identifier = st.text_input("Identifier")
-            comment = st.text_area("Comment")
-            
-            if st.form_submit_button("Submit Request"):
-                if identifier and comment:
-                    if add_request(st.session_state.username, request_type, identifier, comment):
-                        st.success("Request submitted!")
-                        show_notification("New request submitted!")
+    # Main Content Area
+    st.title(f"{'📋' if st.session_state.current_section == 'requests' else ''} "
+             f"{'🖼️' if st.session_state.current_section == 'hold' else ''} "
+             f"{'❌' if st.session_state.current_section == 'mistakes' else ''} "
+             f"{'💬' if st.session_state.current_section == 'chat' else ''} "
+             f"{'⚙️' if st.session_state.current_section == 'admin' else ''} "
+             f"{st.session_state.current_section.title()}")
+    
+    # Requests Section
+    if st.session_state.current_section == "requests":
+        with st.container():
+            st.subheader("Submit a Request")
+            with st.form("request_form"):
+                request_type = st.selectbox("Request Type", ["Email", "Phone Number", "Ticket ID"])
+                identifier = st.text_input("Identifier")
+                comment = st.text_area("Comment")
+                
+                if st.form_submit_button("Submit Request"):
+                    if identifier and comment:
+                        if add_request(st.session_state.username, request_type, identifier, comment):
+                            st.success("Request submitted!")
+                            show_notification("New request submitted!")
+                        else:
+                            st.error("Failed to submit request")
                     else:
-                        st.error("Failed to submit request")
-                else:
-                    st.warning("Please fill all required fields")
+                        st.warning("Please fill all required fields")
         
-        st.markdown("<h2 style='margin-top: 2rem; margin-bottom: 1rem;'>Requests</h2>", unsafe_allow_html=True)
-        
+        st.subheader("All Requests")
         requests = get_requests()
         if requests:
             for req in requests:
@@ -580,12 +529,13 @@ else:
                             args=(req_id, not completed))
                     with cols[1]:
                         st.markdown(f"""
-                        <div style="padding: 1rem; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 1rem;">
-                            <div style="display: flex; justify-content: space-between;">
-                                <strong>ID: {req_id} | Agent: {agent} | Type: {req_type}</strong>
-                                <span style="color: #6c757d; font-size: 0.875rem;">{timestamp}</span>
+                        <div class="card">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h4>Request #{req_id} - {req_type}</h4>
+                                <small>{timestamp}</small>
                             </div>
-                            <p style="margin-top: 0.5rem;"><strong>Identifier:</strong> {identifier}</p>
+                            <p><strong>Agent:</strong> {agent}</p>
+                            <p><strong>Identifier:</strong> {identifier}</p>
                             <p><strong>Comment:</strong> {comment}</p>
                         </div>
                         """, unsafe_allow_html=True)
@@ -594,42 +544,44 @@ else:
 
     # HOLD Section
     elif st.session_state.current_section == "hold":
-        st.markdown("<h2 style='margin-bottom: 1.5rem;'>HOLD Section</h2>", unsafe_allow_html=True)
-        uploaded_image = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
-        if uploaded_image:
-            st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
-            st.success("Image uploaded successfully!")
+        with st.container():
+            st.subheader("Upload Image to HOLD")
+            uploaded_image = st.file_uploader("Choose an image", type=["jpg", "jpeg", "png"])
+            if uploaded_image:
+                st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
+                st.success("Image uploaded successfully!")
 
     # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
-        st.markdown("<h2 style='margin-bottom: 1.5rem;'>Ticket Mistakes</h2>", unsafe_allow_html=True)
+        with st.container():
+            st.subheader("Report Ticket Mistake")
+            with st.form("mistake_form"):
+                team_leader = st.text_input("Team Leader Name")
+                agent_name = st.text_input("Agent Name")
+                ticket_id = st.text_input("Ticket ID")
+                error_description = st.text_area("Error Description")
+                
+                if st.form_submit_button("Submit Mistake"):
+                    if team_leader and agent_name and ticket_id and error_description:
+                        add_mistake(team_leader, agent_name, ticket_id, error_description)
+                        st.success("Mistake submitted!")
+                    else:
+                        st.warning("Please fill all fields")
         
-        with st.form("mistake_form"):
-            team_leader = st.text_input("Team Leader Name")
-            agent_name = st.text_input("Agent Name")
-            ticket_id = st.text_input("Ticket ID")
-            error_description = st.text_area("Error Description")
-            
-            if st.form_submit_button("Submit Mistake"):
-                if team_leader and agent_name and ticket_id and error_description:
-                    add_mistake(team_leader, agent_name, ticket_id, error_description)
-                    st.success("Mistake submitted!")
-                else:
-                    st.warning("Please fill all fields")
-        
-        st.markdown("<h2 style='margin-top: 2rem; margin-bottom: 1rem;'>Submitted Mistakes</h2>", unsafe_allow_html=True)
-        
+        st.subheader("Reported Mistakes")
         mistakes = get_mistakes()
         if mistakes:
             for mistake in mistakes:
                 m_id, tl, agent, t_id, desc, ts = mistake
                 st.markdown(f"""
-                <div style="padding: 1rem; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <strong>ID: {m_id} | Team Leader: {tl} | Agent: {agent}</strong>
-                        <span style="color: #6c757d; font-size: 0.875rem;">{ts}</span>
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4>Mistake #{m_id}</h4>
+                        <small>{ts}</small>
                     </div>
-                    <p style="margin-top: 0.5rem;"><strong>Ticket ID:</strong> {t_id}</p>
+                    <p><strong>Team Leader:</strong> {tl}</p>
+                    <p><strong>Agent:</strong> {agent}</p>
+                    <p><strong>Ticket ID:</strong> {t_id}</p>
                     <p><strong>Description:</strong> {desc}</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -638,91 +590,86 @@ else:
 
     # Group Chat Section
     elif st.session_state.current_section == "chat":
-        st.markdown("<h2 style='margin-bottom: 1.5rem;'>Group Chat</h2>", unsafe_allow_html=True)
-        
         # Messages container
-        st.markdown('<div class="message-container">', unsafe_allow_html=True)
-        
-        messages = get_group_messages()
-        for msg in reversed(messages):  # Show newest at bottom
-            msg_id, sender, message, timestamp, mentions = msg
+        st.subheader("Group Chat")
+        with st.container():
+            st.markdown('<div style="max-height: 500px; overflow-y: auto; padding: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 1rem;">', unsafe_allow_html=True)
             
-            # Check if current user sent the message
-            is_sent = sender == st.session_state.username
+            messages = get_group_messages()
+            for msg in reversed(messages):  # Show newest at bottom
+                msg_id, sender, message, timestamp, mentions = msg
+                
+                # Check if current user sent the message
+                is_sent = sender == st.session_state.username
+                
+                # Format mentions
+                formatted_message = message
+                if mentions:
+                    for mention in mentions.split(","):
+                        formatted_message = formatted_message.replace(
+                            f"@{mention}", 
+                            f'<span style="color: #3b82f6; font-weight: bold;">@{mention}</span>'
+                        )
+                
+                # Format timestamp
+                msg_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                formatted_time = msg_time.strftime("%I:%M %p")
+                
+                if is_sent:
+                    st.markdown(f"""
+                    <div class="message sent">
+                        <div>{formatted_message}</div>
+                        <div class="timestamp">{formatted_time}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="message received">
+                        <div><strong>{sender}</strong></div>
+                        <div>{formatted_message}</div>
+                        <div class="timestamp">{formatted_time}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
-            # Format mentions
-            formatted_message = message
-            if mentions:
-                for mention in mentions.split(","):
-                    formatted_message = formatted_message.replace(
-                        f"@{mention}", 
-                        f'<span class="mention">@{mention}</span>'
-                    )
+            st.markdown('</div>', unsafe_allow_html=True)
             
-            # Format timestamp
-            msg_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-            formatted_time = msg_time.strftime("%I:%M %p")
-            
-            if is_sent:
-                st.markdown(f"""
-                <div class="message sent">
-                    <div>{formatted_message}</div>
-                    <div class="timestamp">{formatted_time}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="message received">
-                    <div><strong>{sender}</strong></div>
-                    <div>{formatted_message}</div>
-                    <div class="timestamp">{formatted_time}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Message input
-        with st.form("message_form"):
-            new_message = st.text_area("Type your message...", key="new_message")
-            if st.form_submit_button("Send"):
-                if new_message.strip():
-                    mentions = extract_mentions(new_message)
-                    valid_mentions = []
-                    
-                    all_users = [user[1] for user in get_all_users()]
-                    for mention in mentions:
-                        if mention in all_users:
-                            valid_mentions.append(mention)
-                        else:
-                            st.warning(f"User @{mention} not found")
-                    
-                    add_group_message(st.session_state.username, new_message, valid_mentions)
-                    st.rerun()
+            # Message input
+            with st.form("message_form"):
+                new_message = st.text_area("Type your message...", key="new_message")
+                if st.form_submit_button("Send"):
+                    if new_message.strip():
+                        mentions = extract_mentions(new_message)
+                        valid_mentions = []
+                        
+                        all_users = [user[1] for user in get_all_users()]
+                        for mention in mentions:
+                            if mention in all_users:
+                                valid_mentions.append(mention)
+                            else:
+                                st.warning(f"User @{mention} not found")
+                        
+                        add_group_message(st.session_state.username, new_message, valid_mentions)
+                        st.rerun()
 
     # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-        st.markdown("<h2 style='margin-bottom: 1.5rem;'>Admin Panel</h2>", unsafe_allow_html=True)
-        
         tab1, tab2 = st.tabs(["User Management", "System Tools"])
         
         with tab1:
-            # Create new user
-            with st.expander("Create New User"):
-                with st.form("create_user_form"):
-                    new_username = st.text_input("Username")
-                    new_password = st.text_input("Password", type="password")
-                    new_role = st.selectbox("Role", ["agent", "admin"])
-                    if st.form_submit_button("Create User"):
-                        if new_username and new_password:
-                            if create_user(new_username, new_password, new_role):
-                                st.success("User created successfully!")
-                                st.rerun()
-                        else:
-                            st.warning("Please enter both username and password")
+            st.subheader("Create New User")
+            with st.form("create_user_form"):
+                new_username = st.text_input("Username")
+                new_password = st.text_input("Password", type="password")
+                new_role = st.selectbox("Role", ["agent", "admin"])
+                if st.form_submit_button("Create User"):
+                    if new_username and new_password:
+                        if create_user(new_username, new_password, new_role):
+                            st.success("User created successfully!")
+                            st.rerun()
+                    else:
+                        st.warning("Please enter both username and password")
             
-            # Manage existing users
-            st.markdown("<h3 style='margin-top: 1.5rem;'>Existing Users</h3>", unsafe_allow_html=True)
-            
+            st.subheader("Manage Users")
             users = get_all_users()
             if users:
                 for user in users:
@@ -765,6 +712,7 @@ else:
                 st.info("No users found")
         
         with tab2:
+            st.subheader("System Tools")
             if st.button("Clear All Requests"):
                 conn = None
                 try:
@@ -796,11 +744,6 @@ else:
             if st.button("Refresh Database"):
                 init_db()
                 st.success("Database refreshed!")
-    
-    st.markdown("""
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 # Check for new messages and requests
 if st.session_state.get("authenticated", False):
@@ -813,5 +756,5 @@ if st.session_state.get("authenticated", False):
     current_request_count = len(get_requests())
     if current_request_count > st.session_state.get("last_request_count", 0):
         st.session_state.last_request_count = current_request_count
-        if st.session_state.current_section != "request" and st.session_state.role == "admin":
+        if st.session_state.current_section != "requests" and st.session_state.role == "admin":
             show_notification("New request submitted!")
