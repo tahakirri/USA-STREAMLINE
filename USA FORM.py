@@ -709,22 +709,27 @@ else:
                     </div>
                     """, unsafe_allow_html=True)
 
-    # Ticket Mistakes Section
+    #  # Ticket Mistakes Section
     elif st.session_state.current_section == "mistakes":
-        if not is_killswitch_enabled():
-            st.subheader("Report a Ticket Mistake")
-            with st.form("mistake_form"):
-                ticket_id = st.text_input("Ticket ID")
-                agent_name = st.text_input("Agent Name")
-                error_description = st.text_area("Error Description")
-                
-                if st.form_submit_button("Report Mistake"):
-                    if ticket_id and agent_name and error_description:
-                        if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
-                            st.success("Mistake reported successfully!")
+        # Show report form only to admins
+        if st.session_state.role == "admin":
+            if not is_killswitch_enabled():
+                st.subheader("Report a Ticket Mistake")
+                with st.form("mistake_form"):
+                    ticket_id = st.text_input("Ticket ID")
+                    agent_name = st.text_input("Agent Name")
+                    error_description = st.text_area("Error Description")
+                    
+                    if st.form_submit_button("Report Mistake"):
+                        if ticket_id and agent_name and error_description:
+                            if add_mistake(st.session_state.username, agent_name, ticket_id, error_description):
+                                st.success("Mistake reported successfully!")
+            else:
+                st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
         else:
-            st.warning("⚠️ System is currently locked. You cannot report new mistakes.")
+            st.info("🔒 Only administrators can report ticket mistakes")
         
+        # Show mistakes log to all users
         st.subheader("Ticket Mistakes Log")
         mistakes = get_mistakes()
         if mistakes:
