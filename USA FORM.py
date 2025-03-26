@@ -628,105 +628,43 @@ else:
                         send_group_message(st.session_state.username, message)
                         st.rerun()
 
-    elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-685        st.subheader("Admin Panel")
-686        
-687        # System Killswitch (Developer Only)
-688        if st.session_state.username.lower() == "taha kirri":
-689            st.markdown("---")
-690            st.subheader("🚨 System Killswitch")
-691            current_status = is_killswitch_enabled()
-692            
-693            col1, col2 = st.columns(2)
-694            if current_status:
-695                if col1.button("🟢 Deactivate Killswitch"):
-696                    toggle_killswitch(False)
-697                    st.rerun()
-698            else:
-699                if col1.button("🔴 Activate Killswitch"):
-700                    toggle_killswitch(True)
-701                    st.rerun()
-702                    
-703            st.markdown(f"**Current Status:** {'🔴 Active' if current_status else '🟢 Inactive'}")
-704
-705        # User Management
-706        st.markdown("---")
-707        st.subheader("👥 User Management")
-708        
-709        # Add User Form
-710        with st.expander("➕ Add New User", expanded=True):
-711            with st.form("add_user_form"):
-712                new_user = st.text_input("Username")
-713                new_pass = st.text_input("Password", type="password")
-714                new_role = st.selectbox("Role", ["agent", "admin"])
-715                
-716                if st.form_submit_button("Create User"):
-717                    if new_user and new_pass:
-718                        if add_user(new_user, new_pass, new_role):
-719                            st.success("User created successfully!")
-720                            st.rerun()
-721
-722        # Existing Users
-723        st.markdown("---")
-724        st.subheader("📋 Existing Users")
-725        users = get_all_users()
-726        
-727        for user in users:
-728            user_id, username, role = user
-729            cols = st.columns([3, 2, 2, 1])
-730            cols[0].write(f"**{username}**")
-731            cols[1].write(f"Role: {role}")
-732            
-733            if cols[3].button("🗑️", key=f"delete_{user_id}"):
-734                if not is_killswitch_enabled():
-735                    delete_user(user_id)
-736                    st.rerun()
-737
-738        # Data Management
-739        st.markdown("---")
-740        st.subheader("🧹 Data Management")
-741        
-742        col1, col2 = st.columns(2)
-743        with col1:
-744            if st.button("Clear All Requests"):
-745                if not is_killswitch_enabled():
-746                    clear_all_requests()
-747                    st.success("All requests cleared!")
-748                    st.rerun()
-749                    
-750            if st.button("Clear All Mistakes"):
-751                if not is_killswitch_enabled():
-752                    clear_all_mistakes()
-753                    st.success("All mistakes cleared!")
-754                    st.rerun()
-755
-756        with col2:
-757            if st.button("Clear Chat History"):
-758                if not is_killswitch_enabled():
-759                    clear_all_group_messages()
-760                    st.success("Chat history cleared!")
-761                    st.rerun()
-762                    
-763            if st.button("Clear HOLD Images"):
-764                if not is_killswitch_enabled():
-765                    clear_hold_images()
-766                    st.success("HOLD images cleared!")
-767                    st.rerun()
-768
-769        # Nuclear Option
-770        st.markdown("---")
-771        st.subheader("☢️ Nuclear Options")
-772        if st.session_state.username.lower() == "taha kirri":
-773            if st.button("💣 DELETE ALL DATA (Irreversible)"):
-774                if st.checkbox("I understand this will delete EVERYTHING"):
-775                    clear_all_requests()
-776                    clear_all_mistakes()
-777                    clear_all_group_messages()
-778                    clear_hold_images()
-779                    st.error("All system data has been permanently deleted!")
-780                    st.rerun()
-781        else:
-782            st.warning("Only system developer can access nuclear options")
+  elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+    st.subheader("Admin Panel")  # This line MUST be indented
+    
+    # System Killswitch (Developer Only)
+    if st.session_state.username.lower() == "taha kirri":
+        st.markdown("---")
+        st.subheader("🚨 System Killswitch")
+        current_status = is_killswitch_enabled()
+        
+        col1, col2 = st.columns(2)
+        if current_status:
+            if col1.button("🟢 Deactivate Killswitch"):
+                toggle_killswitch(False)
+                st.rerun()
+        else:
+            if col1.button("🔴 Activate Killswitch"):
+                toggle_killswitch(True)
+                st.rerun()
+                
+        st.markdown(f"**Current Status:** {'🔴 Active' if current_status else '🟢 Inactive'}")
+
+    # User Management
+    st.markdown("---")
+    st.subheader("👥 User Management")
+    
+    # Add User Form
+    with st.expander("➕ Add New User", expanded=True):
+        with st.form("add_user_form"):
+            new_user = st.text_input("Username")
+            new_pass = st.text_input("Password", type="password")
+            new_role = st.selectbox("Role", ["agent", "admin"])
+            
+            if st.form_submit_button("Create User"):
+                if new_user and new_pass:
+                    if add_user(new_user, new_pass, new_role):
+                        st.success("User created successfully!")
+                        st.rerun()
 
     elif st.session_state.current_section == "hold":
         if st.session_state.role == "admin" and not is_killswitch_enabled():
