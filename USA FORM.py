@@ -99,14 +99,14 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        # System settings table
+        # System settings table - THIS IS THE NEW TABLE WE NEED TO ADD
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY DEFAULT 1,
                 killswitch_enabled INTEGER DEFAULT 0)
         """)
         
-        # Insert default settings
+        # Insert default settings if they don't exist
         cursor.execute("""
             INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) 
             VALUES (1, 0)
@@ -135,6 +135,19 @@ def is_killswitch_enabled():
     try:
         conn = sqlite3.connect("data/requests.db")
         cursor = conn.cursor()
+        
+        # First check if the table exists
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='system_settings'
+        """)
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            # If table doesn't exist, it means killswitch is not enabled
+            return False
+            
+        # Now check the killswitch status
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
         result = cursor.fetchone()
         return bool(result[0]) if result else False
