@@ -7,54 +7,13 @@ import re
 from PIL import Image
 import io
 
-# [NEW] Notification Function
-def send_notification(title, message):
-    st.markdown(f"""
-    <script>
-        const notify = () => {{
-            if (!("Notification" in window)) {{
-                console.log("This browser does not support desktop notification");
-                return;
-            }}
+# --------------------------
+# Database Functions
+# --------------------------
 
-            const checkNotificationPermission = () => {{
-                if (Notification.permission === "granted") {{
-                    new Notification("{title}", {{
-                        body: "{message}",
-                        icon: "/favicon.ico"
-                    }});
-                }} else if (Notification.permission !== "denied") {{
-                    Notification.requestPermission().then((permission) => {{
-                        if (permission === "granted") {{
-                            new Notification("{title}", {{
-                                body: "{message}",
-                                icon: "/favicon.ico"
-                            }});
-                        }}
-                    }});
-                }}
-            }};
-
-            if (Notification.permission !== "granted") {{
-                Notification.requestPermission().then((permission) => {{
-                    if (permission === "granted") {{
-                        checkNotificationPermission();
-                    }}
-                }});
-            }} else {{
-                checkNotificationPermission();
-            }}
-        }};
-
-        notify();
-    </script>
-    """, unsafe_allow_html=True)
-
-# [EXISTING] Password Hashing Function
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-# [EXISTING] Authentication Function
 def authenticate(username, password):
     conn = None
     try:
@@ -82,40 +41,6 @@ def authenticate(username, password):
         if conn:
             conn.close()
 
-# [MODIFIED] Group Message Function with Notification
-def send_group_message(sender, message):
-    conn = None
-    try:
-        conn = sqlite3.connect("data/requests.db")
-        cursor = conn.cursor()
-        
-        # Extract mentions
-        mentions = re.findall(r'@(\w+)', message)
-        
-        cursor.execute("""
-            INSERT INTO group_messages (sender, message, timestamp, mentions) 
-            VALUES (?, ?, ?, ?)
-        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
-        conn.commit()
-        
-        # [NEW] Send notification for new message
-        send_notification(
-            "New Group Message", 
-            f"Message from {sender}: {message[:50]}{'...' if len(message) > 50 else ''}"
-        )
-        
-        return True
-    except sqlite3.Error as e:
-        st.error(f"Failed to send message: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-# Rest of your existing database functions remain the same...
-
-
-# Database Initialization Function
 def init_db():
     conn = None
     try:
@@ -208,13 +133,6 @@ def add_mistake(team_leader, agent_name, ticket_id, error_description):
             VALUES (?, ?, ?, ?, ?)
         """, (team_leader, agent_name, ticket_id, error_description, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
-        
-        # [NEW] Send notification
-        send_notification(
-            "New Mistake Reported", 
-            f"Mistake reported by {team_leader} for agent {agent_name}, Ticket: {ticket_id}"
-        )
-        
         return True
     except sqlite3.Error as e:
         st.error(f"Failed to add mistake: {e}")
@@ -241,6 +159,28 @@ def get_mistakes():
             conn.close()
 
 # Group Chat Functions
+def send_group_message(sender, message):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        
+        # Extract mentions
+        mentions = re.findall(r'@(\w+)', message)
+        
+        cursor.execute("""
+            INSERT INTO group_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ','.join(mentions)))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to send message: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def get_group_messages():
     conn = None
     try:
@@ -259,7 +199,101 @@ def get_group_messages():
         if conn:
             conn.close()
 
-# Additional existing functions (add_request, get_requests, etc.)
+# Admin Panel Functions
+def get_all_users():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, role FROM users")
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch users: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def add_user(username, password, role):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, password, role) 
+            VALUES (?, ?, ?)
+        """, (username, hash_password(password), role))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to add user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(user_id):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to delete user: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+# New functions for clearing data
+def clear_all_requests():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM requests")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear requests: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_mistakes():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM mistakes")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear mistakes: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def clear_all_group_messages():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM group_messages")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear group messages: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+# Existing functions from previous implementation...
 def add_request(agent_name, request_type, identifier, comment):
     conn = None
     try:
@@ -270,13 +304,6 @@ def add_request(agent_name, request_type, identifier, comment):
             VALUES (?, ?, ?, ?, ?)
         """, (agent_name, request_type, identifier, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
-        
-        # [NEW] Send notification
-        send_notification(
-            "New Request Submitted", 
-            f"New {request_type} request by {agent_name} for {identifier}"
-        )
-        
         return True
     except sqlite3.Error as e:
         st.error(f"Failed to add request: {e}")
@@ -285,7 +312,88 @@ def add_request(agent_name, request_type, identifier, comment):
         if conn:
             conn.close()
 
-# (Continue with other existing functions...)
+def get_requests():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM requests 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch requests: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def update_request_status(request_id, completed):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE requests 
+            SET completed = ? 
+            WHERE id = ?
+        """, (1 if completed else 0, request_id))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to update request status: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def add_hold_image(uploader, image_data):
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO hold_images (uploader, image_data, timestamp) 
+            VALUES (?, ?, ?)
+        """, (uploader, image_data, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Failed to add HOLD image: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def get_hold_images():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM hold_images 
+            ORDER BY timestamp DESC
+        """)
+        return cursor.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Failed to fetch HOLD images: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def clear_hold_images():
+    conn = None
+    try:
+        conn = sqlite3.connect("data/requests.db")
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM hold_images")
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Failed to clear HOLD images: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # Streamlit App Configuration
 st.set_page_config(
     page_title="Request Management System", 
@@ -340,7 +448,6 @@ if "authenticated" not in st.session_state:
     st.session_state.username = None
     st.session_state.current_section = "requests"
     st.session_state.last_message_count = 0
-    st.session_state.last_request_count = 0
 
 # Initialize database
 init_db()
@@ -407,7 +514,7 @@ else:
              f"{'⚙️' if st.session_state.current_section == 'admin' else ''}"
              f" {st.session_state.current_section.title()}")
 
-                 # Requests Section
+    # Requests Section
     if st.session_state.current_section == "requests":
         with st.container():
             st.subheader("Submit a Request")
@@ -423,10 +530,6 @@ else:
         
         st.subheader("All Requests")
         requests = get_requests()
-        if len(requests) > st.session_state.last_request_count:
-            send_notification("New Request", "A new request has been added.")
-            st.session_state.last_request_count = len(requests)
-        
         for req in requests:
             req_id, agent, req_type, identifier, comment, timestamp, completed = req
             
@@ -491,10 +594,6 @@ else:
         
         # Display messages
         messages = get_group_messages()
-        if len(messages) > st.session_state.last_message_count:
-            send_notification("New Message", "A new message has been added to the group chat.")
-            st.session_state.last_message_count = len(messages)
-        
         for msg in reversed(messages):
             msg_id, sender, message, timestamp, mentions = msg
             is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
@@ -509,27 +608,14 @@ else:
         
         # Send message form
         with st.form("chat_form"):
-            message = st.text_input("Type your message (use @username to mention)", key="chat_message")
+            message = st.text_input("Type your message (use @username to mention)")
             
             if st.form_submit_button("Send"):
                 if message:
                     if send_group_message(st.session_state.username, message):
-                        st.session_state.chat_message = ""  # Clear the message input
                         st.rerun()
-        
-        # Refresh chat button
-        if st.button("🔄 Refresh Chat"):
-            st.rerun()
-        
-        # Auto-refresh script
-        st.markdown("""
-        <script>
-        setTimeout(() => {
-            window.location.reload();
-        }, 30000);  // Refresh every 30 seconds
-        </script>
-        """, unsafe_allow_html=True)
-            # Admin Panel Section
+
+    # Admin Panel Section
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
         st.subheader("User Management")
         
@@ -548,18 +634,12 @@ else:
         st.subheader("Existing Users")
         users = get_all_users()
         for user_id, username, role in users:
-            cols = st.columns([0.4, 0.2, 0.2, 0.2])
+            cols = st.columns([0.6, 0.2, 0.2])
             with cols[0]:
-                st.write(f"**{username}**")
+                st.write(f"*{username}*")
             with cols[1]:
                 st.write(role)
             with cols[2]:
-                new_password = st.text_input(f"New Password for {username}", type="password", key=f"new_pass_{user_id}")
-                if st.button(f"Update Password", key=f"update_pass_{user_id}"):
-                    if new_password:
-                        if update_user_password(user_id, new_password):
-                            st.success(f"Password for {username} updated!")
-            with cols[3]:
                 if st.button(f"Delete {username}", key=f"delete_{user_id}"):
                     if delete_user(user_id):
                         st.success(f"User {username} deleted!")
@@ -630,6 +710,7 @@ else:
                     st.markdown(f"""
                     <div class="card">
                         <div style="display: flex; justify-content: space-between;">
+                            <h4>Image #{img_id}</h4>
                             <small>{timestamp}</small>
                         </div>
                         <p><strong>Uploaded by:</strong> {uploader}</p>
@@ -637,12 +718,12 @@ else:
                     """, unsafe_allow_html=True)
                     
                     # Display the image
-                    st.image(Image.open(io.BytesIO(image_data)), use_container_width=True)
+                    st.image(Image.open(io.BytesIO(image_data)), caption=f"Image {img_id}", use_container_width=True)
         
         if st.session_state.role == "admin" and st.button("🗑️ Clear All HOLD Images"):
             if clear_hold_images():
                 st.success("All HOLD images cleared!")
 
 # Run the app
-if __name__ == "__main__":
+if _name_ == "_main_":
     st.write("Request Management System")
