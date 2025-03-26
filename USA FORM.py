@@ -500,53 +500,81 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    .stApp { background-color: #212529; }
+    .stApp { background-color: #121212; color: #E0E0E0; }
+    
     [data-testid="stSidebar"] { 
-        background-color: #ffffff; 
-        border-right: 1px solid #e9ecef; 
+        background-color: #1E1E1E; 
+        border-right: 1px solid #3A3A3A; 
     }
+
     .stButton>button {
-        background-color: #3b82f6;
+        background-color: #2563EB;
         color: white;
         border-radius: 8px;
         padding: 0.5rem 1rem;
+        border: none;
     }
+
     .card {
-        background-color: white;
+        background-color: #1F1F1F;
+        color: #E0E0E0;
         border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(255, 255, 255, 0.1);
         padding: 1.5rem;
         margin-bottom: 1.5rem;
     }
+
     .message {
         max-width: 70%;
         padding: 0.75rem 1rem;
         border-radius: 1rem;
         margin-bottom: 0.5rem;
     }
+
     .sent {
-        background-color: #3b82f6;
+        background-color: #2563EB;
         color: white;
         margin-left: auto;
     }
+
     .received {
-        background-color: #e9ecef;
+        background-color: #2C2C2C;
+        color: #E0E0E0;
         margin-right: auto;
     }
+
     .killswitch-active {
-        background-color: #ffebee;
-        border-left: 5px solid #f44336;
+        background-color: #4A1E1E;
+        border-left: 5px solid #D32F2F;
         padding: 1rem;
         margin-bottom: 1rem;
+        color: #FFCDD2;
     }
+
     .killswitch-control {
-        background-color: #fff3e0;
+        background-color: #333333;
+        color: #E0E0E0;
         padding: 1rem;
         border-radius: 8px;
         margin-bottom: 1rem;
     }
+
+    /* Scrollbar customization */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #222;
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 # Initialize session state
 if "authenticated" not in st.session_state:
