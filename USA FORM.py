@@ -904,7 +904,7 @@ else:
                     <p>Uploaded by: {uploader}</p>
                 </div>
                 """, unsafe_allow_html=True)
-                st.image(Image.open(io.BytesIO(data)), use_column_width=True)
+                st.image(Image.open(io.BytesIO(data)), use_container_width=True)
         else:
             st.info("No images in HOLD")
 
