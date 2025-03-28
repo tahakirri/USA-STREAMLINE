@@ -949,7 +949,7 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-       elif st.session_state.current_section == "chat":
+    elif st.session_state.current_section == "chat":
         messages = get_group_messages()
         
         # Container for all messages with scrolling
