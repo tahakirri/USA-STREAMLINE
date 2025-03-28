@@ -108,6 +108,16 @@ def init_db():
                 FOREIGN KEY(break_id) REFERENCES breaks(id))
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS request_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER,
+                user TEXT,
+                comment TEXT,
+                timestamp TEXT,
+                FOREIGN KEY(request_id) REFERENCES requests(id))
+        """)
+        
         cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
@@ -147,11 +157,19 @@ def add_request(agent_name, request_type, identifier, comment):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
             INSERT INTO requests (agent_name, request_type, identifier, comment, timestamp) 
             VALUES (?, ?, ?, ?, ?)
-        """, (agent_name, request_type, identifier, comment, 
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (agent_name, request_type, identifier, comment, timestamp))
+        
+        request_id = cursor.lastrowid
+        
+        cursor.execute("""
+            INSERT INTO request_comments (request_id, user, comment, timestamp)
+            VALUES (?, ?, ?, ?)
+        """, (request_id, agent_name, f"Request created: {comment}", timestamp))
+        
         conn.commit()
         return True
     finally:
@@ -195,6 +213,36 @@ def update_request_status(request_id, completed):
                       (1 if completed else 0, request_id))
         conn.commit()
         return True
+    finally:
+        conn.close()
+
+def add_request_comment(request_id, user, comment):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO request_comments (request_id, user, comment, timestamp)
+            VALUES (?, ?, ?, ?)
+        """, (request_id, user, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_request_comments(request_id):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM request_comments 
+            WHERE request_id = ?
+            ORDER BY timestamp ASC
+        """, (request_id,))
+        return cursor.fetchall()
     finally:
         conn.close()
 
@@ -356,6 +404,7 @@ def clear_all_requests():
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM requests")
+        cursor.execute("DELETE FROM request_comments")
         conn.commit()
         return True
     finally:
@@ -537,6 +586,20 @@ st.markdown("""
         margin-bottom: 1rem;
         color: #FFCDD2;
     }
+    .comment-box {
+        margin: 0.5rem 0;
+        padding: 0.5rem;
+        background: #2D2D2D;
+        border-radius: 8px;
+    }
+    .comment-user {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.25rem;
+    }
+    .comment-text {
+        margin-top: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -664,7 +727,9 @@ else:
                     comment = st.text_area("Comment")
                     if st.form_submit_button("Submit"):
                         if identifier and comment:
-                            add_request(st.session_state.username, request_type, identifier, comment)
+                            if add_request(st.session_state.username, request_type, identifier, comment):
+                                st.success("Request submitted successfully!")
+                                st.rerun()
         
         st.subheader("🔍 Search Requests")
         search_query = st.text_input("Search requests...")
@@ -692,9 +757,32 @@ else:
                         </div>
                         <p>Agent: {agent}</p>
                         <p>Identifier: {identifier}</p>
-                        <p>Comment: {comment}</p>
-                    </div>
+                        <div style="margin-top: 1rem;">
+                            <h5>Status Updates:</h5>
                     """, unsafe_allow_html=True)
+                    
+                    comments = get_request_comments(req_id)
+                    for comment in comments:
+                        cmt_id, _, user, cmt_text, cmt_time = comment
+                        st.markdown(f"""
+                            <div class="comment-box">
+                                <div class="comment-user">
+                                    <small><strong>{user}</strong></small>
+                                    <small>{cmt_time}</small>
+                                </div>
+                                <div class="comment-text">{cmt_text}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    if st.session_state.role == "admin" and not is_killswitch_enabled():
+                        with st.form(key=f"comment_form_{req_id}"):
+                            new_comment = st.text_input("Add status update/comment")
+                            if st.form_submit_button("Add Comment"):
+                                if new_comment:
+                                    add_request_comment(req_id, st.session_state.username, new_comment)
+                                    st.rerun()
 
     elif st.session_state.current_section == "dashboard":
         st.subheader("📊 Request Completion Dashboard")
@@ -763,7 +851,7 @@ else:
                     cols[2].write(f"Created by: {created_by}")
                     
                     if cols[3].button("✏️", key=f"edit_{b_id}"):
-                        pass  # Add edit functionality if needed
+                        pass
                     
                     if cols[4].button("❌", key=f"del_{b_id}"):
                         delete_break_slot(b_id)
@@ -791,7 +879,6 @@ else:
                 for b in available_breaks:
                     b_id, name, start, end, max_u, curr_u, created_by, ts = b
                     
-                    # Get current bookings for this break
                     conn = sqlite3.connect("data/requests.db")
                     cursor = conn.cursor()
                     cursor.execute("""
@@ -810,7 +897,6 @@ else:
                         cols[1].write(f"Available slots: {remaining}/{max_u}")
                         
                         if cols[2].button("Book", key=f"book_{b_id}"):
-                            # Get user ID
                             conn = sqlite3.connect("data/requests.db")
                             cursor = conn.cursor()
                             cursor.execute("SELECT id FROM users WHERE username = ?", 
@@ -869,8 +955,10 @@ else:
             msg_id, sender, message, ts, mentions = msg
             is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
             st.markdown(f"""
-            <div class="message {'sent' if sender == st.session_state.username else 'received'}"
-                style="{'background-color: #3b82f6' if is_mentioned else ''}">
+            <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
+                        padding: 1rem;
+                        border-radius: 8px;
+                        margin-bottom: 1rem;">
                 <strong>{sender}</strong>: {message}<br>
                 <small>{ts}</small>
             </div>
@@ -930,7 +1018,7 @@ else:
         
         with st.expander("❌ Clear All Requests"):
             with st.form("clear_requests_form"):
-                st.warning("This will permanently delete ALL requests!")
+                st.warning("This will permanently delete ALL requests and their comments!")
                 if st.form_submit_button("Clear All Requests"):
                     if clear_all_requests():
                         st.success("All requests deleted!")
