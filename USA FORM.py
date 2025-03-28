@@ -949,40 +949,50 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-    elif st.session_state.current_section == "chat":
-    messages = get_group_messages()
-    
-    # Container for all messages with scrolling
-    chat_container = st.container()
-    
-    with chat_container:
-        for msg in reversed(messages):
-            msg_id, sender, message, ts, mentions = msg
-            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
-            is_me = sender == st.session_state.username
-            
-            # WhatsApp-like styling
-            st.markdown(f"""
-            <div style="display: flex; flex-direction: {'row-reverse' if is_me else 'row'}; margin-bottom: 0.5rem;">
-                <div style="
-                    max-width: 70%;
-                    padding: 0.75rem;
-                    border-radius: 18px;
-                    background: {'#0084FF' if is_me else '#EAEAEA'};
-                    color: {'white' if is_me else 'black'};
-                    margin-left: {'0' if is_me else '10px'};
-                    margin-right: {'10px' if is_me else '0'};
-                    {'border: 2px solid #FFD700;' if is_mentioned else ''}
-                ">
-                    <div style="font-weight: bold; font-size: 0.9rem;">{sender}</div>
-                    <div style="margin: 0.25rem 0;">{message}</div>
-                    <div style="text-align: right; font-size: 0.75rem; opacity: 0.8;">
-                        {datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")}
-                        {' ✅' if is_me else ''}
+       elif st.session_state.current_section == "chat":
+        messages = get_group_messages()
+        
+        # Container for all messages with scrolling
+        chat_container = st.container()
+        
+        with chat_container:
+            for msg in reversed(messages):
+                msg_id, sender, message, ts, mentions = msg
+                is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                is_me = sender == st.session_state.username
+                
+                # WhatsApp-like styling
+                st.markdown(f"""
+                <div style="display: flex; flex-direction: {'row-reverse' if is_me else 'row'}; margin-bottom: 0.5rem;">
+                    <div style="
+                        max-width: 70%;
+                        padding: 0.75rem;
+                        border-radius: 18px;
+                        background: {'#0084FF' if is_me else '#EAEAEA'};
+                        color: {'white' if is_me else 'black'};
+                        margin-left: {'0' if is_me else '10px'};
+                        margin-right: {'10px' if is_me else '0'};
+                        {'border: 2px solid #FFD700;' if is_mentioned else ''}
+                    ">
+                        <div style="font-weight: bold; font-size: 0.9rem;">{sender}</div>
+                        <div style="margin: 0.25rem 0;">{message}</div>
+                        <div style="text-align: right; font-size: 0.75rem; opacity: 0.8;">
+                            {datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").strftime("%H:%M")}
+                            {' ✅' if is_me else ''}
+                        </div>
                     </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+        
+        # Input at the bottom (fixed position would require custom CSS)
+        if not is_killswitch_enabled():
+            with st.form("chat_form", clear_on_submit=True):
+                cols = st.columns([5, 1])
+                message = cols[0].text_input("Type your message...", label_visibility="collapsed", key="chat_input")
+                if cols[1].form_submit_button("Send", use_container_width=True):
+                    if message:
+                        send_group_message(st.session_state.username, message)
+                        st.rerun()
     
     # Input at the bottom (fixed position would require custom CSS)
     if not is_killswitch_enabled():
