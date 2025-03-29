@@ -82,7 +82,8 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS system_settings (
                 id INTEGER PRIMARY KEY DEFAULT 1,
-                killswitch_enabled INTEGER DEFAULT 0)
+                killswitch_enabled INTEGER DEFAULT 0,
+                chat_killswitch_enabled INTEGER DEFAULT 0)
         """)
         
         cursor.execute("""
@@ -118,7 +119,7 @@ def init_db():
                 FOREIGN KEY(request_id) REFERENCES requests(id))
         """)
         
-        cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
+        cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) VALUES (1, 0, 0)")
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
@@ -138,11 +139,32 @@ def is_killswitch_enabled():
     finally:
         conn.close()
 
+def is_chat_killswitch_enabled():
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chat_killswitch_enabled FROM system_settings WHERE id = 1")
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    finally:
+        conn.close()
+
 def toggle_killswitch(enable):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE system_settings SET killswitch_enabled = ? WHERE id = 1",
+                      (1 if enable else 0,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def toggle_chat_killswitch(enable):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE system_settings SET chat_killswitch_enabled = ? WHERE id = 1",
                       (1 if enable else 0,))
         conn.commit()
         return True
@@ -290,8 +312,8 @@ def search_mistakes(query):
         conn.close()
 
 def send_group_message(sender, message):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
+    if is_killswitch_enabled() or is_chat_killswitch_enabled():
+        st.error("Chat is currently locked. Please contact the developer.")
         return False
         
     conn = sqlite3.connect("data/requests.db")
@@ -586,6 +608,13 @@ st.markdown("""
         margin-bottom: 1rem;
         color: #FFCDD2;
     }
+    .chat-killswitch-active {
+        background-color: #1E3A4A;
+        border-left: 5px solid #1E88E5;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        color: #B3E5FC;
+    }
     .comment-box {
         margin: 0.5rem 0;
         padding: 0.5rem;
@@ -645,6 +674,13 @@ else:
         <div class="killswitch-active">
             <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
             <p>The system is currently in read-only mode.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    elif is_chat_killswitch_enabled():
+        st.markdown("""
+        <div class="chat-killswitch-active">
+            <h3>⚠️ CHAT LOCKED ⚠️</h3>
+            <p>The chat functionality is currently disabled.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -950,27 +986,30 @@ else:
             """, unsafe_allow_html=True)
 
     elif st.session_state.current_section == "chat":
-        messages = get_group_messages()
-        for msg in reversed(messages):
-            msg_id, sender, message, ts, mentions = msg
-            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
-            st.markdown(f"""
-            <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
-                        padding: 1rem;
-                        border-radius: 8px;
-                        margin-bottom: 1rem;">
-                <strong>{sender}</strong>: {message}<br>
-                <small>{ts}</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        if not is_killswitch_enabled():
-            with st.form("chat_form"):
-                message = st.text_input("Type your message...")
-                if st.form_submit_button("Send"):
-                    if message:
-                        send_group_message(st.session_state.username, message)
-                        st.rerun()
+        if is_chat_killswitch_enabled():
+            st.warning("Chat functionality is currently disabled by the administrator.")
+        else:
+            messages = get_group_messages()
+            for msg in reversed(messages):
+                msg_id, sender, message, ts, mentions = msg
+                is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                st.markdown(f"""
+                <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
+                            padding: 1rem;
+                            border-radius: 8px;
+                            margin-bottom: 1rem;">
+                    <strong>{sender}</strong>: {message}<br>
+                    <small>{ts}</small>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if not is_killswitch_enabled():
+                with st.form("chat_form"):
+                    message = st.text_input("Type your message...")
+                    if st.form_submit_button("Send"):
+                        if message:
+                            send_group_message(st.session_state.username, message)
+                            st.rerun()
 
     elif st.session_state.current_section == "hold":
         if st.session_state.role == "admin" and not is_killswitch_enabled():
@@ -1012,6 +1051,24 @@ else:
                 if col1.button("Activate Killswitch"):
                     toggle_killswitch(True)
                     st.rerun()
+            
+            st.markdown("---")
+            
+            st.subheader("💬 Chat Killswitch")
+            current_chat = is_chat_killswitch_enabled()
+            chat_status = "🔴 ACTIVE" if current_chat else "🟢 INACTIVE"
+            st.write(f"Current Status: {chat_status}")
+            
+            col1, col2 = st.columns(2)
+            if current_chat:
+                if col1.button("Deactivate Chat Killswitch"):
+                    toggle_chat_killswitch(False)
+                    st.rerun()
+            else:
+                if col1.button("Activate Chat Killswitch"):
+                    toggle_chat_killswitch(True)
+                    st.rerun()
+            
             st.markdown("---")
         
         st.subheader("🧹 Data Management")
