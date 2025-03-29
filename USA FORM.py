@@ -136,7 +136,6 @@ def init_db():
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
         
-        
         # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
             ("Karabila Younes", "30866"),
@@ -187,8 +186,6 @@ def init_db():
             ("Issam Samghini", "admin@2025"),
             ("Loubna Fellah", "admin@99"),
             ("Youssef Kamal", "admin@006"),
-            
-            
         ]
         
         for agent_name, workspace_id in agents:
