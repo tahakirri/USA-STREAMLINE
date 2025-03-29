@@ -170,6 +170,17 @@ def init_db():
     ("Abdelhamid Jaber", "30708"),
     ("Yassine Elkanouni", "30735")
 ]
+         for username, agent_name in agents:
+            # Use workspace ID as username and agent name as password (lowercase, no spaces)
+            password = agent_name.lower().replace(" ", "")
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role) 
+                VALUES (?, ?, ?)
+            """, (username, hash_password(password), "agent"))
+        
+        conn.commit()
+    finally:
+        conn.close()
         conn.commit()
     finally:
         conn.close()
