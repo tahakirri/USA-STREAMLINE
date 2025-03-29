@@ -135,7 +135,7 @@ def init_db():
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
-        ("fouad fathi", hash_password("admin@99"), "admin"))
+        
         
         # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
