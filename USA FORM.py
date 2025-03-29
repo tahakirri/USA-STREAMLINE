@@ -183,9 +183,6 @@ def init_db():
             ("Fatiha Lkamel", "30967"),
             ("Abdelhamid Jaber", "30708"),
             ("Yassine Elkanouni", "30735")
-            ("Issam Samghini", "admin@2025"),
-            ("Loubna Fellah", "admin@99"),
-            ("Youssef Kamal", "admin@006"),
         ]
         
         for agent_name, workspace_id in agents:
