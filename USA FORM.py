@@ -131,10 +131,24 @@ def init_db():
         """)
         
         # Create default admin account
-        cursor.execute("""
+      cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
+        
+        # Additional admin accounts with easy passwords
+        additional_admins = [
+            ("Issam Samghini", "admin@2025"),
+            ("Loubna Fellah", "admin@99"),
+            ("Youssef Kamal", "admin@006"),
+            ("Fouad Fathi", "admin@55")
+        ]
+        
+        for admin_name, password in additional_admins:
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role) 
+                VALUES (?, ?, ?)
+            """, (admin_name, hash_password(password), "admin"))
         
         # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
@@ -194,7 +208,6 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
-
 def is_killswitch_enabled():
     conn = sqlite3.connect("data/requests.db")
     try:
