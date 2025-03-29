@@ -131,24 +131,11 @@ def init_db():
         """)
         
         # Create default admin account
-      cursor.execute("""
+        cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
         
-        # Additional admin accounts with easy passwords
-        additional_admins = [
-            ("Issam Samghini", "admin@2025"),
-            ("Loubna Fellah", "admin@99"),
-            ("Youssef Kamal", "admin@006"),
-            ("Fouad Fathi", "admin@55")
-        ]
-        
-        for admin_name, password in additional_admins:
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (username, password, role) 
-                VALUES (?, ?, ?)
-            """, (admin_name, hash_password(password), "admin"))
         # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
             ("Karabila Younes", "30866"),
@@ -1065,27 +1052,30 @@ else:
             """, unsafe_allow_html=True)
 
     elif st.session_state.current_section == "chat":
-        messages = get_group_messages()
-        for msg in reversed(messages):
-            msg_id, sender, message, ts, mentions = msg
-            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
-            st.markdown(f"""
-            <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
-                        padding: 1rem;
-                        border-radius: 8px;
-                        margin-bottom: 1rem;">
-                <strong>{sender}</strong>: {message}<br>
-                <small>{ts}</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        if not is_killswitch_enabled():
-            with st.form("chat_form"):
-                message = st.text_input("Type your message...")
-                if st.form_submit_button("Send"):
-                    if message:
-                        send_group_message(st.session_state.username, message)
-                        st.rerun()
+        if is_chat_killswitch_enabled():
+            st.warning("Chat functionality is currently disabled by the administrator.")
+        else:
+            messages = get_group_messages()
+            for msg in reversed(messages):
+                msg_id, sender, message, ts, mentions = msg
+                is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                st.markdown(f"""
+                <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
+                            padding: 1rem;
+                            border-radius: 8px;
+                            margin-bottom: 1rem;">
+                    <strong>{sender}</strong>: {message}<br>
+                    <small>{ts}</small>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if not is_killswitch_enabled():
+                with st.form("chat_form"):
+                    message = st.text_input("Type your message...")
+                    if st.form_submit_button("Send"):
+                        if message:
+                            send_group_message(st.session_state.username, message)
+                            st.rerun()
 
     elif st.session_state.current_section == "hold":
         if st.session_state.role == "admin" and not is_killswitch_enabled():
@@ -1127,6 +1117,24 @@ else:
                 if col1.button("Activate Killswitch"):
                     toggle_killswitch(True)
                     st.rerun()
+            
+            st.markdown("---")
+            
+            st.subheader("💬 Chat Killswitch")
+            current_chat = is_chat_killswitch_enabled()
+            chat_status = "🔴 ACTIVE" if current_chat else "🟢 INACTIVE"
+            st.write(f"Current Status: {chat_status}")
+            
+            col1, col2 = st.columns(2)
+            if current_chat:
+                if col1.button("Deactivate Chat Killswitch"):
+                    toggle_chat_killswitch(False)
+                    st.rerun()
+            else:
+                if col1.button("Activate Chat Killswitch"):
+                    toggle_chat_killswitch(True)
+                    st.rerun()
+            
             st.markdown("---")
         
         st.subheader("🧹 Data Management")
