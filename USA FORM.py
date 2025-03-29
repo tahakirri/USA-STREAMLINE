@@ -137,14 +137,7 @@ try:
         VALUES (?, ?, ?)
     """, ("taha kirri", hash_password("arise@99"), "admin"))
     
-    # Additional admin accounts with easy passwords
-   additional_admins = [
-            ("Issam Samghini", "admin123"),
-            ("Loubna Fellah", "admin456"),
-            ("Youssef Kamal", "admin789"),
-            ("Fouad Fathi", "admin000")
-        ]
-        
+    # Additional admin accounts with easy passwords     
         for admin_name, password in additional_admins:
             cursor.execute("""
                 INSERT OR IGNORE INTO users (username, password, role) 
