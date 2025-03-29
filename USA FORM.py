@@ -131,17 +131,17 @@ def init_db():
         """)
         
         # Create default admin account
-      cursor.execute("""
+cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
         
         # Additional admin accounts with easy passwords
         additional_admins = [
-            ("Issam Samghini", "admin@2025"),
-            ("Loubna Fellah", "admin@99"),
-            ("Youssef Kamal", "admin@006"),
-            ("Fouad Fathi", "admin@55")
+            ("Issam Samghini", "admin123"),
+            ("Loubna Fellah", "admin456"),
+            ("Youssef Kamal", "admin789"),
+            ("Fouad Fathi", "admin000")
         ]
         
         for admin_name, password in additional_admins:
