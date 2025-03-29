@@ -20,7 +20,7 @@ def authenticate(username, password):
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute("SELECT role FROM users WHERE username = ? AND password = ?", 
+        cursor.execute("SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
                       (username, hashed_password))
         result = cursor.fetchone()
         return result[0] if result else None
@@ -33,6 +33,7 @@ def init_db():
     try:
         cursor = conn.cursor()
         
+        # Create tables if they don't exist
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,11 +80,22 @@ def init_db():
                 timestamp TEXT)
         """)
         
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY DEFAULT 1,
-                killswitch_enabled INTEGER DEFAULT 0)
-        """)
+        # Handle system_settings table schema migration
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_settings'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                CREATE TABLE system_settings (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    killswitch_enabled INTEGER DEFAULT 0,
+                    chat_killswitch_enabled INTEGER DEFAULT 0)
+            """)
+            cursor.execute("INSERT INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) VALUES (1, 0, 0)")
+        else:
+            cursor.execute("PRAGMA table_info(system_settings)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'chat_killswitch_enabled' not in columns:
+                cursor.execute("ALTER TABLE system_settings ADD COLUMN chat_killswitch_enabled INTEGER DEFAULT 0")
+                cursor.execute("UPDATE system_settings SET chat_killswitch_enabled = 0 WHERE id = 1")
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS breaks (
@@ -118,59 +130,62 @@ def init_db():
                 FOREIGN KEY(request_id) REFERENCES requests(id))
         """)
         
-        cursor.execute("INSERT OR IGNORE INTO system_settings (id, killswitch_enabled) VALUES (1, 0)")
+        # Create default admin account
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
+        
+        # Create agent accounts (workspace ID as username, agent name as password)
         agents = [
-    ("Karabila Younes", "30866"),
-    ("Kaoutar Mzara", "30514"),
-    ("Ben Tahar Chahid", "30864"),
-    ("Cherbassi Khadija", "30868"),
-    ("Lekhmouchi Kamal", "30869"),
-    ("Said Kilani", "30626"),
-    ("AGLIF Rachid", "30830"),
-    ("Yacine Adouha", "30577"),
-    ("Manal Elanbi", "30878"),
-    ("Jawad Ouassaddine", "30559"),
-    ("Kamal Elhaouar", "30844"),
-    ("Hoummad Oubella", "30702"),
-    ("Zouheir Essafi", "30703"),
-    ("Anwar Atifi", "30781"),
-    ("Said Elgaouzi", "30782"),
-    ("HAMZA SAOUI", "30716"),
-    ("Ibtissam Mazhari", "30970"),
-    ("Imad Ghazali", "30971"),
-    ("Jamila Lahrech", "30972"),
-    ("Nassim Ouazzani Touhami", "30973"),
-    ("Salaheddine Chaggour", "30974"),
-    ("Omar Tajani", "30711"),
-    ("Nizar Remz", "30728"),
-    ("Abdelouahed Fettah", "30693"),
-    ("Amal Bouramdane", "30675"),
-    ("Fatima Ezzahrae Oubaalla", "30513"),
-    ("Redouane Bertal", "30643"),
-    ("Abdelouahab Chenani", "30789"),
-    ("Imad El Youbi", "30797"),
-    ("Youssef Hammouda", "30791"),
-    ("Anas Ouassifi", "30894"),
-    ("SALSABIL ELMOUSS", "30723"),
-    ("Hicham Khalafa", "30712"),
-    ("Ghita Adib", "30710"),
-    ("Aymane Msikila", "30722"),
-    ("Marouane Boukhadda", "30890"),
-    ("Hamid Boulatouan", "30899"),
-    ("Bouchaib Chafiqi", "30895"),
-    ("Houssam Gouaalla", "30891"),
-    ("Abdellah Rguig", "30963"),
-    ("Abdellatif Chatir", "30964"),
-    ("Abderrahman Oueto", "30965"),
-    ("Fatiha Lkamel", "30967"),
-    ("Abdelhamid Jaber", "30708"),
-    ("Yassine Elkanouni", "30735")
-]
-         for username, agent_name in agents:
+            ("30866", "Karabila Younes"),
+            ("30514", "Kaoutar Mzara"),
+            ("30864", "Ben Tahar Chahid"),
+            ("30868", "Cherbassi Khadija"),
+            ("30869", "Lekhmouchi Kamal"),
+            ("30626", "Said Kilani"),
+            ("30830", "AGLIF Rachid"),
+            ("30577", "Yacine Adouha"),
+            ("30878", "Manal Elanbi"),
+            ("30559", "Jawad Ouassaddine"),
+            ("30844", "Kamal Elhaouar"),
+            ("30702", "Hoummad Oubella"),
+            ("30703", "Zouheir Essafi"),
+            ("30781", "Anwar Atifi"),
+            ("30782", "Said Elgaouzi"),
+            ("30716", "HAMZA SAOUI"),
+            ("30970", "Ibtissam Mazhari"),
+            ("30971", "Imad Ghazali"),
+            ("30972", "Jamila Lahrech"),
+            ("30973", "Nassim Ouazzani Touhami"),
+            ("30974", "Salaheddine Chaggour"),
+            ("30711", "Omar Tajani"),
+            ("30728", "Nizar Remz"),
+            ("30693", "Abdelouahed Fettah"),
+            ("30675", "Amal Bouramdane"),
+            ("30513", "Fatima Ezzahrae Oubaalla"),
+            ("30643", "Redouane Bertal"),
+            ("30789", "Abdelouahab Chenani"),
+            ("30797", "Imad El Youbi"),
+            ("30791", "Youssef Hammouda"),
+            ("30894", "Anas Ouassifi"),
+            ("30723", "SALSABIL ELMOUSS"),
+            ("30712", "Hicham Khalafa"),
+            ("30710", "Ghita Adib"),
+            ("30722", "Aymane Msikila"),
+            ("30890", "Marouane Boukhadda"),
+            ("30899", "Hamid Boulatouan"),
+            ("30895", "Bouchaib Chafiqi"),
+            ("30891", "Houssam Gouaalla"),
+            ("30963", "Abdellah Rguig"),
+            ("30964", "Abdellatif Chatir"),
+            ("30965", "Abderrahman Oueto"),
+            ("30967", "Fatiha Lkamel"),
+            ("30708", "Abdelhamid Jaber"),
+            ("30735", "Yassine Elkanouni")
+        ]
+        
+        for username, agent_name in agents:
             # Use workspace ID as username and agent name as password (lowercase, no spaces)
             password = agent_name.lower().replace(" ", "")
             cursor.execute("""
@@ -178,9 +193,6 @@ def init_db():
                 VALUES (?, ?, ?)
             """, (username, hash_password(password), "agent"))
         
-        conn.commit()
-    finally:
-        conn.close()
         conn.commit()
     finally:
         conn.close()
