@@ -138,18 +138,18 @@ try:
     """, ("taha kirri", hash_password("arise@99"), "admin"))
     
     # Additional admin accounts with easy passwords
-    additional_admins = [
-        ("Issam Samghini", "admin123"),
-        ("Loubna Fellah", "admin456"),
-        ("Youssef Kamal", "admin789"),
-        ("Fouad Fathi", "admin000")
-    ]
-    
-    for admin_name, password in additional_admins:
-        cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
-            VALUES (?, ?, ?)
-        """, (admin_name, hash_password(password), "admin"))
+   additional_admins = [
+            ("Issam Samghini", "admin123"),
+            ("Loubna Fellah", "admin456"),
+            ("Youssef Kamal", "admin789"),
+            ("Fouad Fathi", "admin000")
+        ]
+        
+        for admin_name, password in additional_admins:
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role) 
+                VALUES (?, ?, ?)
+            """, (admin_name, hash_password(password), "admin"))
     
     # Create agent accounts (agent name as username, workspace ID as password)
     agents = [
