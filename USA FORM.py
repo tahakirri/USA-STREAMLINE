@@ -136,62 +136,60 @@ def init_db():
             VALUES (?, ?, ?)
         """, ("taha kirri", hash_password("arise@99"), "admin"))
         
-        # Create agent accounts (workspace ID as username, agent name as password)
+        # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
-            ("30866", "Karabila Younes"),
-            ("30514", "Kaoutar Mzara"),
-            ("30864", "Ben Tahar Chahid"),
-            ("30868", "Cherbassi Khadija"),
-            ("30869", "Lekhmouchi Kamal"),
-            ("30626", "Said Kilani"),
-            ("30830", "AGLIF Rachid"),
-            ("30577", "Yacine Adouha"),
-            ("30878", "Manal Elanbi"),
-            ("30559", "Jawad Ouassaddine"),
-            ("30844", "Kamal Elhaouar"),
-            ("30702", "Hoummad Oubella"),
-            ("30703", "Zouheir Essafi"),
-            ("30781", "Anwar Atifi"),
-            ("30782", "Said Elgaouzi"),
-            ("30716", "HAMZA SAOUI"),
-            ("30970", "Ibtissam Mazhari"),
-            ("30971", "Imad Ghazali"),
-            ("30972", "Jamila Lahrech"),
-            ("30973", "Nassim Ouazzani Touhami"),
-            ("30974", "Salaheddine Chaggour"),
-            ("30711", "Omar Tajani"),
-            ("30728", "Nizar Remz"),
-            ("30693", "Abdelouahed Fettah"),
-            ("30675", "Amal Bouramdane"),
-            ("30513", "Fatima Ezzahrae Oubaalla"),
-            ("30643", "Redouane Bertal"),
-            ("30789", "Abdelouahab Chenani"),
-            ("30797", "Imad El Youbi"),
-            ("30791", "Youssef Hammouda"),
-            ("30894", "Anas Ouassifi"),
-            ("30723", "SALSABIL ELMOUSS"),
-            ("30712", "Hicham Khalafa"),
-            ("30710", "Ghita Adib"),
-            ("30722", "Aymane Msikila"),
-            ("30890", "Marouane Boukhadda"),
-            ("30899", "Hamid Boulatouan"),
-            ("30895", "Bouchaib Chafiqi"),
-            ("30891", "Houssam Gouaalla"),
-            ("30963", "Abdellah Rguig"),
-            ("30964", "Abdellatif Chatir"),
-            ("30965", "Abderrahman Oueto"),
-            ("30967", "Fatiha Lkamel"),
-            ("30708", "Abdelhamid Jaber"),
-            ("30735", "Yassine Elkanouni")
+            ("Karabila Younes", "30866"),
+            ("Kaoutar Mzara", "30514"),
+            ("Ben Tahar Chahid", "30864"),
+            ("Cherbassi Khadija", "30868"),
+            ("Lekhmouchi Kamal", "30869"),
+            ("Said Kilani", "30626"),
+            ("AGLIF Rachid", "30830"),
+            ("Yacine Adouha", "30577"),
+            ("Manal Elanbi", "30878"),
+            ("Jawad Ouassaddine", "30559"),
+            ("Kamal Elhaouar", "30844"),
+            ("Hoummad Oubella", "30702"),
+            ("Zouheir Essafi", "30703"),
+            ("Anwar Atifi", "30781"),
+            ("Said Elgaouzi", "30782"),
+            ("HAMZA SAOUI", "30716"),
+            ("Ibtissam Mazhari", "30970"),
+            ("Imad Ghazali", "30971"),
+            ("Jamila Lahrech", "30972"),
+            ("Nassim Ouazzani Touhami", "30973"),
+            ("Salaheddine Chaggour", "30974"),
+            ("Omar Tajani", "30711"),
+            ("Nizar Remz", "30728"),
+            ("Abdelouahed Fettah", "30693"),
+            ("Amal Bouramdane", "30675"),
+            ("Fatima Ezzahrae Oubaalla", "30513"),
+            ("Redouane Bertal", "30643"),
+            ("Abdelouahab Chenani", "30789"),
+            ("Imad El Youbi", "30797"),
+            ("Youssef Hammouda", "30791"),
+            ("Anas Ouassifi", "30894"),
+            ("SALSABIL ELMOUSS", "30723"),
+            ("Hicham Khalafa", "30712"),
+            ("Ghita Adib", "30710"),
+            ("Aymane Msikila", "30722"),
+            ("Marouane Boukhadda", "30890"),
+            ("Hamid Boulatouan", "30899"),
+            ("Bouchaib Chafiqi", "30895"),
+            ("Houssam Gouaalla", "30891"),
+            ("Abdellah Rguig", "30963"),
+            ("Abdellatif Chatir", "30964"),
+            ("Abderrahman Oueto", "30965"),
+            ("Fatiha Lkamel", "30967"),
+            ("Abdelhamid Jaber", "30708"),
+            ("Yassine Elkanouni", "30735")
         ]
         
-        for username, agent_name in agents:
-            # Use workspace ID as username and agent name as password (lowercase, no spaces)
-            password = agent_name.lower().replace(" ", "")
+        for agent_name, workspace_id in agents:
             cursor.execute("""
                 INSERT OR IGNORE INTO users (username, password, role) 
                 VALUES (?, ?, ?)
-            """, (username, hash_password(password), "agent"))
+            """, (agent_name, hash_password(workspace_id), "agent"))
         
         conn.commit()
     finally:
@@ -207,11 +205,32 @@ def is_killswitch_enabled():
     finally:
         conn.close()
 
+def is_chat_killswitch_enabled():
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chat_killswitch_enabled FROM system_settings WHERE id = 1")
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    finally:
+        conn.close()
+
 def toggle_killswitch(enable):
     conn = sqlite3.connect("data/requests.db")
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE system_settings SET killswitch_enabled = ? WHERE id = 1",
+                      (1 if enable else 0,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def toggle_chat_killswitch(enable):
+    conn = sqlite3.connect("data/requests.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE system_settings SET chat_killswitch_enabled = ? WHERE id = 1",
                       (1 if enable else 0,))
         conn.commit()
         return True
@@ -359,8 +378,8 @@ def search_mistakes(query):
         conn.close()
 
 def send_group_message(sender, message):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
+    if is_killswitch_enabled() or is_chat_killswitch_enabled():
+        st.error("Chat is currently locked. Please contact the developer.")
         return False
         
     conn = sqlite3.connect("data/requests.db")
@@ -655,6 +674,13 @@ st.markdown("""
         margin-bottom: 1rem;
         color: #FFCDD2;
     }
+    .chat-killswitch-active {
+        background-color: #1E3A4A;
+        border-left: 5px solid #1E88E5;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        color: #B3E5FC;
+    }
     .comment-box {
         margin: 0.5rem 0;
         padding: 0.5rem;
@@ -716,6 +742,13 @@ else:
             <p>The system is currently in read-only mode.</p>
         </div>
         """, unsafe_allow_html=True)
+    elif is_chat_killswitch_enabled():
+        st.markdown("""
+        <div class="chat-killswitch-active">
+            <h3>⚠️ CHAT LOCKED ⚠️</h3>
+            <p>The chat functionality is currently disabled.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     def show_notifications():
         current_requests = get_requests()
@@ -746,7 +779,7 @@ else:
     show_notifications()
 
     with st.sidebar:
-        st.title(f"👋 Welcome, {st.session_state.username.title()}")
+        st.title(f"👋 Welcome, {st.session_state.username}")
         st.markdown("---")
         
         nav_options = [
@@ -962,7 +995,7 @@ else:
                     
                     with st.container():
                         cols = st.columns([3, 2, 1])
-                        cols[0].write(f"{name} ({start} - {end})")
+                        cols[0].write(f"*{name}* ({start} - {end})")
                         cols[1].write(f"Available slots: {remaining}/{max_u}")
                         
                         if cols[2].button("Book", key=f"book_{b_id}"):
