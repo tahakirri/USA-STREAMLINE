@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import hashlib
-from datetime import datetime
+from datetime import datetime, time
 import os
 import re
 from PIL import Image
@@ -12,11 +12,16 @@ import pandas as pd
 # Database Functions
 # --------------------------
 
+def get_db_connection():
+    """Create and return a database connection."""
+    os.makedirs("data", exist_ok=True)
+    return sqlite3.connect("data/requests.db")
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate(username, password):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
@@ -28,8 +33,7 @@ def authenticate(username, password):
         conn.close()
 
 def init_db():
-    os.makedirs("data", exist_ok=True)
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         
@@ -130,6 +134,37 @@ def init_db():
                 FOREIGN KEY(request_id) REFERENCES requests(id))
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS late_logins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                presence_time TEXT,
+                login_time TEXT,
+                reason TEXT,
+                timestamp TEXT)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS quality_issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                issue_type TEXT,
+                timing TEXT,
+                mobile_number TEXT,
+                product TEXT,
+                timestamp TEXT)
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS midshift_issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                issue_type TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                timestamp TEXT)
+        """)
+        
         # Create default admin account
         cursor.execute("""
             INSERT OR IGNORE INTO users (username, password, role) 
@@ -148,6 +183,7 @@ def init_db():
                 INSERT OR IGNORE INTO users (username, password, role) 
                 VALUES (?, ?, ?)
             """, (username, hash_password(password), "admin"))
+        
         # Create agent accounts (agent name as username, workspace ID as password)
         agents = [
             ("Karabila Younes", "30866"),
@@ -208,7 +244,7 @@ def init_db():
         conn.close()
 
 def is_killswitch_enabled():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
@@ -218,7 +254,7 @@ def is_killswitch_enabled():
         conn.close()
 
 def is_chat_killswitch_enabled():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT chat_killswitch_enabled FROM system_settings WHERE id = 1")
@@ -228,7 +264,7 @@ def is_chat_killswitch_enabled():
         conn.close()
 
 def toggle_killswitch(enable):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE system_settings SET killswitch_enabled = ? WHERE id = 1",
@@ -239,7 +275,7 @@ def toggle_killswitch(enable):
         conn.close()
 
 def toggle_chat_killswitch(enable):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE system_settings SET chat_killswitch_enabled = ? WHERE id = 1",
@@ -254,7 +290,7 @@ def add_request(agent_name, request_type, identifier, comment):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -276,7 +312,7 @@ def add_request(agent_name, request_type, identifier, comment):
         conn.close()
 
 def get_requests():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM requests ORDER BY timestamp DESC")
@@ -285,7 +321,7 @@ def get_requests():
         conn.close()
 
 def search_requests(query):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         query = f"%{query.lower()}%"
@@ -306,7 +342,7 @@ def update_request_status(request_id, completed):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE requests SET completed = ? WHERE id = ?",
@@ -321,7 +357,7 @@ def add_request_comment(request_id, user, comment):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -334,7 +370,7 @@ def add_request_comment(request_id, user, comment):
         conn.close()
 
 def get_request_comments(request_id):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -351,7 +387,7 @@ def add_mistake(team_leader, agent_name, ticket_id, error_description):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -365,7 +401,7 @@ def add_mistake(team_leader, agent_name, ticket_id, error_description):
         conn.close()
 
 def get_mistakes():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM mistakes ORDER BY timestamp DESC")
@@ -374,7 +410,7 @@ def get_mistakes():
         conn.close()
 
 def search_mistakes(query):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         query = f"%{query.lower()}%"
@@ -394,7 +430,7 @@ def send_group_message(sender, message):
         st.error("Chat is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         mentions = re.findall(r'@(\w+)', message)
@@ -409,7 +445,7 @@ def send_group_message(sender, message):
         conn.close()
 
 def get_group_messages():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM group_messages ORDER BY timestamp DESC LIMIT 50")
@@ -418,7 +454,7 @@ def get_group_messages():
         conn.close()
 
 def get_all_users():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT id, username, role FROM users")
@@ -431,7 +467,7 @@ def add_user(username, password, role):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
@@ -446,7 +482,7 @@ def delete_user(user_id):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -460,7 +496,7 @@ def add_hold_image(uploader, image_data):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -473,7 +509,7 @@ def add_hold_image(uploader, image_data):
         conn.close()
 
 def get_hold_images():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM hold_images ORDER BY timestamp DESC")
@@ -486,7 +522,7 @@ def clear_hold_images():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM hold_images")
@@ -500,7 +536,7 @@ def clear_all_requests():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM requests")
@@ -515,7 +551,7 @@ def clear_all_mistakes():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM mistakes")
@@ -529,7 +565,7 @@ def clear_all_group_messages():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM group_messages")
@@ -543,7 +579,7 @@ def add_break_slot(break_name, start_time, end_time, max_users, created_by):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -556,8 +592,26 @@ def add_break_slot(break_name, start_time, end_time, max_users, created_by):
     finally:
         conn.close()
 
+def update_break_slot(break_id, break_name, start_time, end_time, max_users):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE breaks 
+            SET break_name = ?, start_time = ?, end_time = ?, max_users = ?
+            WHERE id = ?
+        """, (break_name, start_time, end_time, max_users, break_id))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
 def get_all_break_slots():
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM breaks ORDER BY start_time")
@@ -566,18 +620,19 @@ def get_all_break_slots():
         conn.close()
 
 def get_available_break_slots(date):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT b.* 
             FROM breaks b
-            WHERE b.max_users > (
-                SELECT COUNT(*) 
-                FROM break_bookings bb 
-                WHERE bb.break_id = b.id 
-                AND bb.booking_date = ?
-            )
+            LEFT JOIN (
+                SELECT break_id, COUNT(*) as booking_count
+                FROM break_bookings 
+                WHERE booking_date = ?
+                GROUP BY break_id
+            ) bb ON b.id = bb.break_id
+            WHERE b.max_users > IFNULL(bb.booking_count, 0)
             ORDER BY b.start_time
         """, (date,))
         return cursor.fetchall()
@@ -589,7 +644,7 @@ def book_break_slot(break_id, user_id, username, booking_date):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -603,7 +658,7 @@ def book_break_slot(break_id, user_id, username, booking_date):
         conn.close()
 
 def get_user_bookings(username, date):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -617,7 +672,7 @@ def get_user_bookings(username, date):
         conn.close()
 
 def get_all_bookings(date):
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("""
@@ -637,7 +692,7 @@ def delete_break_slot(break_id):
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM breaks WHERE id = ?", (break_id,))
@@ -652,7 +707,7 @@ def clear_all_break_bookings():
         st.error("System is currently locked. Please contact the developer.")
         return False
         
-    conn = sqlite3.connect("data/requests.db")
+    conn = get_db_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM break_bookings")
@@ -660,6 +715,266 @@ def clear_all_break_bookings():
         return True
     finally:
         conn.close()
+
+def add_late_login(agent_name, presence_time, login_time, reason):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO late_logins (agent_name, presence_time, login_time, reason, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_name, presence_time, login_time, reason,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_late_logins():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM late_logins ORDER BY timestamp DESC")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def add_quality_issue(agent_name, issue_type, timing, mobile_number, product):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO quality_issues (agent_name, issue_type, timing, mobile_number, product, timestamp) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (agent_name, issue_type, timing, mobile_number, product,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_quality_issues():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM quality_issues ORDER BY timestamp DESC")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def add_midshift_issue(agent_name, issue_type, start_time, end_time):
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO midshift_issues (agent_name, issue_type, start_time, end_time, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_name, issue_type, start_time, end_time,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_midshift_issues():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM midshift_issues ORDER BY timestamp DESC")
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def clear_late_logins():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM late_logins")
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def clear_quality_issues():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM quality_issues")
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def clear_midshift_issues():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM midshift_issues")
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+# --------------------------
+# Fancy Number Checker Functions
+# --------------------------
+
+def is_sequential(digits, step=1):
+    """Check if digits form a sequential pattern with given step"""
+    try:
+        return all(int(digits[i]) == int(digits[i-1]) + step for i in range(1, len(digits)))
+    except:
+        return False
+
+def is_fancy_number(phone_number):
+    clean_number = re.sub(r'\D', '', phone_number)
+    
+    # Get last 6 digits according to Lycamobile policy
+    if len(clean_number) >= 6:
+        last_six = clean_number[-6:]
+        last_three = clean_number[-3:]
+    else:
+        return False, "Number too short (need at least 6 digits)"
+    
+    patterns = []
+    
+    # Special case for 13322866688
+    if clean_number == "13322866688":
+        patterns.append("Special VIP number (13322866688)")
+    
+    # Check for ABBBAA pattern (like 566655)
+    if (len(last_six) == 6 and 
+        last_six[0] == last_six[5] and 
+        last_six[1] == last_six[2] == last_six[3] and 
+        last_six[4] == last_six[0] and 
+        last_six[0] != last_six[1]):
+        patterns.append("ABBBAA pattern (e.g., 566655)")
+    
+    # Check for ABBBA pattern (like 233322)
+    if (len(last_six) >= 5 and 
+        last_six[0] == last_six[4] and 
+        last_six[1] == last_six[2] == last_six[3] and 
+        last_six[0] != last_six[1]):
+        patterns.append("ABBBA pattern (e.g., 233322)")
+    
+    # 1. 6-digit patterns (strict matches only)
+    # All same digits (666666)
+    if len(set(last_six)) == 1:
+        patterns.append("6 identical digits")
+    
+    # Consecutive ascending (123456)
+    if is_sequential(last_six, 1):
+        patterns.append("6-digit ascending sequence")
+        
+    # Consecutive descending (654321)
+    if is_sequential(last_six, -1):
+        patterns.append("6-digit descending sequence")
+        
+    # Palindrome (100001)
+    if last_six == last_six[::-1]:
+        patterns.append("6-digit palindrome")
+    
+    # 2. 3-digit patterns (strict matches from image)
+    first_triple = last_six[:3]
+    second_triple = last_six[3:]
+    
+    # Double triplets (444555)
+    if len(set(first_triple)) == 1 and len(set(second_triple)) == 1 and first_triple != second_triple:
+        patterns.append("Double triplets (444555)")
+    
+    # Similar triplets (121122)
+    if (first_triple[0] == first_triple[1] and 
+        second_triple[0] == second_triple[1] and 
+        first_triple[2] == second_triple[2]):
+        patterns.append("Similar triplets (121122)")
+    
+    # Repeating triplets (786786)
+    if first_triple == second_triple:
+        patterns.append("Repeating triplets (786786)")
+    
+    # Nearly sequential (457456) - exactly 1 digit difference
+    if abs(int(first_triple) - int(second_triple)) == 1:
+        patterns.append("Nearly sequential triplets (457456)")
+    
+    # 3. 2-digit patterns (strict matches from image)
+    # Incremental pairs (111213)
+    pairs = [last_six[i:i+2] for i in range(0, 5, 1)]
+    try:
+        if all(int(pairs[i]) == int(pairs[i-1]) + 1 for i in range(1, len(pairs))):
+            patterns.append("Incremental pairs (111213)")
+    
+        # Repeating pairs (202020)
+        if (pairs[0] == pairs[2] == pairs[4] and 
+            pairs[1] == pairs[3] and 
+            pairs[0] != pairs[1]):
+            patterns.append("Repeating pairs (202020)")
+    
+        # Alternating pairs (010101)
+        if (pairs[0] == pairs[2] == pairs[4] and 
+            pairs[1] == pairs[3] and 
+            pairs[0] != pairs[1]):
+            patterns.append("Alternating pairs (010101)")
+    
+        # Stepping pairs (324252) - Fixed this check
+        if (all(int(pairs[i][0]) == int(pairs[i-1][0]) + 1 for i in range(1, len(pairs))) and
+            all(int(pairs[i][1]) == int(pairs[i-1][1]) + 2 for i in range(1, len(pairs)))):
+            patterns.append("Stepping pairs (324252)")
+    except:
+        pass
+    
+    # 4. Exceptional cases (must match exactly)
+    exceptional_triplets = ['123', '555', '777', '999']
+    if last_three in exceptional_triplets:
+        patterns.append(f"Exceptional case ({last_three})")
+    
+    # Strict validation - only allow patterns that exactly match our rules
+    valid_patterns = []
+    for p in patterns:
+        if any(rule in p for rule in [
+            "Special VIP number",
+            "ABBBAA pattern",
+            "ABBBA pattern",
+            "6 identical digits",
+            "6-digit ascending sequence",
+            "6-digit descending sequence",
+            "6-digit palindrome",
+            "Double triplets (444555)",
+            "Similar triplets (121122)",
+            "Repeating triplets (786786)",
+            "Nearly sequential triplets (457456)",
+            "Incremental pairs (111213)",
+            "Repeating pairs (202020)",
+            "Alternating pairs (010101)",
+            "Stepping pairs (324252)",
+            "Exceptional case"
+        ]):
+            valid_patterns.append(p)
+    
+    return bool(valid_patterns), ", ".join(valid_patterns) if valid_patterns else "No qualifying fancy pattern"
 
 # --------------------------
 # Streamlit App
@@ -707,6 +1022,24 @@ st.markdown("""
     .comment-text {
         margin-top: 0.5rem;
     }
+    .editable-break {
+        background-color: #2D3748;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .stTimeInput > div > div > input {
+        padding: 0.5rem;
+    }
+    .time-input {
+        font-family: monospace;
+    }
+    /* Fancy number checker styles */
+    .fancy-number { color: #00ff00; font-weight: bold; }
+    .normal-number { color: #ffffff; }
+    .result-box { padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .fancy-result { background-color: #1e3d1e; border: 1px solid #00ff00; }
+    .normal-result { background-color: #3d1e1e; border: 1px solid #ff0000; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -718,7 +1051,8 @@ if "authenticated" not in st.session_state:
         "current_section": "requests",
         "last_request_count": 0,
         "last_mistake_count": 0,
-        "last_message_ids": []
+        "last_message_ids": [],
+        "break_edits": {}
     })
 
 init_db()
@@ -800,7 +1134,11 @@ else:
             ("☕ Breaks", "breaks"),
             ("🖼️ HOLD", "hold"),
             ("❌ Mistakes", "mistakes"),
-            ("💬 Chat", "chat")
+            ("💬 Chat", "chat"),
+            ("📱 Fancy Number", "fancy_number"),
+            ("⏰ Late Login", "late_login"),
+            ("📞 Quality Issues", "quality_issues"),
+            ("🔄 Mid-shift Issues", "midshift_issues")
         ]
         if st.session_state.role == "admin":
             nav_options.append(("⚙️ Admin", "admin"))
@@ -939,47 +1277,123 @@ else:
                 with st.form("add_break_form"):
                     cols = st.columns(3)
                     break_name = cols[0].text_input("Break Name")
-                    start_time = cols[1].time_input("Start Time")
-                    end_time = cols[2].time_input("End Time")
+                    start_time = cols[1].text_input("Start Time (HH:MM)")
+                    end_time = cols[2].text_input("End Time (HH:MM)")
                     max_users = st.number_input("Max Users", min_value=1, value=1)
                     
                     if st.form_submit_button("Add Break Slot"):
                         if break_name:
-                            add_break_slot(
-                                break_name,
-                                start_time.strftime("%H:%M"),
-                                end_time.strftime("%H:%M"),
-                                max_users,
-                                st.session_state.username
-                            )
-                            st.rerun()
+                            try:
+                                # Validate time formats
+                                datetime.strptime(start_time, "%H:%M")
+                                datetime.strptime(end_time, "%H:%M")
+                                add_break_slot(
+                                    break_name,
+                                    start_time,
+                                    end_time,
+                                    max_users,
+                                    st.session_state.username
+                                )
+                                st.success("Break slot added successfully!")
+                                st.rerun()
+                            except ValueError:
+                                st.error("Invalid time format. Please use HH:MM format (e.g., 08:30)")
             
             st.subheader("Current Break Schedule")
             breaks = get_all_break_slots()
+            
+            # Initialize break_edits if not exists
+            if "break_edits" not in st.session_state:
+                st.session_state.break_edits = {}
+            
+            # Store current edits
+            for b in breaks:
+                b_id, name, start, end, max_u, curr_u, created_by, ts = b
+                if b_id not in st.session_state.break_edits:
+                    st.session_state.break_edits[b_id] = {
+                        "break_name": name,
+                        "start_time": start,
+                        "end_time": end,
+                        "max_users": max_u
+                    }
+            
+            # Display editable breaks
             for b in breaks:
                 b_id, name, start, end, max_u, curr_u, created_by, ts = b
                 with st.container():
+                    st.markdown(f"<div class='editable-break'>", unsafe_allow_html=True)
+                    
                     cols = st.columns([3, 2, 2, 1, 1])
-                    cols[0].write(f"{name} ({start} - {end})")
-                    cols[1].write(f"Max: {max_u}")
-                    cols[2].write(f"Created by: {created_by}")
+                    with cols[0]:
+                        st.session_state.break_edits[b_id]["break_name"] = st.text_input(
+                            "Break Name", 
+                            value=st.session_state.break_edits[b_id]["break_name"],
+                            key=f"name_{b_id}"
+                        )
+                    with cols[1]:
+                        st.session_state.break_edits[b_id]["start_time"] = st.text_input(
+                            "Start Time (HH:MM)", 
+                            value=st.session_state.break_edits[b_id]["start_time"],
+                            key=f"start_{b_id}"
+                        )
+                    with cols[2]:
+                        st.session_state.break_edits[b_id]["end_time"] = st.text_input(
+                            "End Time (HH:MM)", 
+                            value=st.session_state.break_edits[b_id]["end_time"],
+                            key=f"end_{b_id}"
+                        )
+                    with cols[3]:
+                        st.session_state.break_edits[b_id]["max_users"] = st.number_input(
+                            "Max Users", 
+                            min_value=1,
+                            value=st.session_state.break_edits[b_id]["max_users"],
+                            key=f"max_{b_id}"
+                        )
+                    with cols[4]:
+                        if st.button("❌", key=f"del_{b_id}"):
+                            delete_break_slot(b_id)
+                            st.rerun()
                     
-                    if cols[3].button("✏️", key=f"edit_{b_id}"):
-                        pass
-                    
-                    if cols[4].button("❌", key=f"del_{b_id}"):
-                        delete_break_slot(b_id)
-                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Single save button for all changes
+            if st.button("💾 Save All Changes"):
+                errors = []
+                for b_id, edits in st.session_state.break_edits.items():
+                    try:
+                        # Validate time format
+                        datetime.strptime(edits["start_time"], "%H:%M")
+                        datetime.strptime(edits["end_time"], "%H:%M")
+                        update_break_slot(
+                            b_id,
+                            edits["break_name"],
+                            edits["start_time"],
+                            edits["end_time"],
+                            edits["max_users"]
+                        )
+                    except ValueError as e:
+                        errors.append(f"Break ID {b_id}: Invalid time format. Please use HH:MM format.")
+                        continue
+                
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    st.success("All changes saved successfully!")
+                    st.rerun()
             
             st.markdown("---")
             st.subheader("All Bookings for Selected Date")
-            bookings = get_all_bookings(formatted_date)
-            if bookings:
-                for b in bookings:
-                    b_id, break_id, user_id, username, date, ts, break_name, start, end, role = b
-                    st.write(f"{username} ({role}) - {break_name} ({start} - {end})")
-            else:
-                st.info("No bookings for selected date")
+            try:
+                bookings = get_all_bookings(formatted_date)
+                if bookings:
+                    for b in bookings:
+                        b_id, break_id, user_id, username, date, ts, break_name, start, end, role = b
+                        st.write(f"{username} ({role}) - {break_name} ({start} - {end})")
+                else:
+                    st.info("No bookings for selected date")
+            except Exception as e:
+                st.error(f"Error loading bookings: {str(e)}")
             
             if st.button("Clear All Bookings", key="clear_all_bookings"):
                 clear_all_break_bookings()
@@ -987,50 +1401,63 @@ else:
         
         else:
             st.subheader("Available Break Slots")
-            available_breaks = get_available_break_slots(formatted_date)
-            
-            if available_breaks:
-                for b in available_breaks:
-                    b_id, name, start, end, max_u, curr_u, created_by, ts = b
-                    
-                    conn = sqlite3.connect("data/requests.db")
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT COUNT(*) 
-                        FROM break_bookings 
-                        WHERE break_id = ? AND booking_date = ?
-                    """, (b_id, formatted_date))
-                    booked_count = cursor.fetchone()[0]
-                    conn.close()
-                    
-                    remaining = max_u - booked_count
-                    
-                    with st.container():
-                        cols = st.columns([3, 2, 1])
-                        cols[0].write(f"*{name}* ({start} - {end})")
-                        cols[1].write(f"Available slots: {remaining}/{max_u}")
+            try:
+                available_breaks = get_available_break_slots(formatted_date)
+                
+                if available_breaks:
+                    for b in available_breaks:
+                        b_id, name, start, end, max_u, curr_u, created_by, ts = b
                         
-                        if cols[2].button("Book", key=f"book_{b_id}"):
-                            conn = sqlite3.connect("data/requests.db")
+                        try:
+                            conn = get_db_connection()
                             cursor = conn.cursor()
-                            cursor.execute("SELECT id FROM users WHERE username = ?", 
-                                         (st.session_state.username,))
-                            user_id = cursor.fetchone()[0]
+                            cursor.execute("""
+                                SELECT COUNT(*) 
+                                FROM break_bookings 
+                                WHERE break_id = ? AND booking_date = ?
+                            """, (b_id, formatted_date))
+                            booked_count = cursor.fetchone()[0]
+                            remaining = max_u - booked_count
+                        except Exception as e:
+                            st.error(f"Error checking availability: {str(e)}")
+                            continue
+                        finally:
                             conn.close()
+                        
+                        with st.container():
+                            cols = st.columns([3, 2, 1])
+                            cols[0].write(f"*{name}* ({start} - {end})")
+                            cols[1].write(f"Available slots: {remaining}/{max_u}")
                             
-                            book_break_slot(b_id, user_id, st.session_state.username, formatted_date)
-                            st.rerun()
+                            if cols[2].button("Book", key=f"book_{b_id}"):
+                                try:
+                                    conn = get_db_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute("SELECT id FROM users WHERE username = ?", 
+                                                (st.session_state.username,))
+                                    user_id = cursor.fetchone()[0]
+                                    book_break_slot(b_id, user_id, st.session_state.username, formatted_date)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error booking slot: {str(e)}")
+                                finally:
+                                    conn.close()
+            except Exception as e:
+                st.error(f"Error loading break slots: {str(e)}")
             
             st.markdown("---")
             st.subheader("Your Bookings")
-            user_bookings = get_user_bookings(st.session_state.username, formatted_date)
-            
-            if user_bookings:
-                for b in user_bookings:
-                    b_id, break_id, user_id, username, date, ts, break_name, start, end = b
-                    st.write(f"{break_name} ({start} - {end})")
-            else:
-                st.info("You have no bookings for selected date")
+            try:
+                user_bookings = get_user_bookings(st.session_state.username, formatted_date)
+                
+                if user_bookings:
+                    for b in user_bookings:
+                        b_id, break_id, user_id, username, date, ts, break_name, start, end = b
+                        st.write(f"{break_name} ({start} - {end})")
+                else:
+                    st.info("You have no bookings for selected date")
+            except Exception as e:
+                st.error(f"Error loading your bookings: {str(e)}")
 
     elif st.session_state.current_section == "mistakes":
         if not is_killswitch_enabled():
@@ -1113,6 +1540,348 @@ else:
         else:
             st.info("No images in HOLD")
 
+    elif st.session_state.current_section == "fancy_number":
+        st.header("📱 Lycamobile Fancy Number Checker")
+        st.subheader("Official Policy: Analyzes last 6 digits only for qualifying patterns")
+
+        phone_input = st.text_input("Enter Phone Number", 
+                                  placeholder="e.g., 1555123456 or 44207123456")
+
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if st.button("🔍 Check Number"):
+                if not phone_input:
+                    st.warning("Please enter a phone number")
+                else:
+                    is_fancy, pattern = is_fancy_number(phone_input)
+                    clean_number = re.sub(r'\D', '', phone_input)
+                    
+                    # Extract last 6 digits for display
+                    last_six = clean_number[-6:] if len(clean_number) >= 6 else clean_number
+                    formatted_num = f"{last_six[:3]}-{last_six[3:]}" if len(last_six) == 6 else last_six
+
+                    if is_fancy:
+                        st.markdown(f"""
+                        <div class="result-box fancy-result">
+                            <h3><span class="fancy-number">✨ {formatted_num} ✨</span></h3>
+                            <p>FANCY NUMBER DETECTED!</p>
+                            <p><strong>Pattern:</strong> {pattern}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class="result-box normal-result">
+                            <h3><span class="normal-number">{formatted_num}</span></h3>
+                            <p>Standard phone number</p>
+                            <p><strong>Reason:</strong> {pattern}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("""
+            ### Lycamobile Fancy Number Policy
+            **Qualifying Patterns (last 6 digits only):**
+            
+            #### 6-Digit Patterns
+            - 123456 (ascending)
+            - 987654 (descending)
+            - 666666 (repeating)
+            - 100001 (palindrome)
+            
+            #### 3-Digit Patterns  
+            - 444 555 (double triplets)
+            - 121 122 (similar triplets)
+            - 786 786 (repeating triplets)
+            - 457 456 (nearly sequential)
+            
+            #### 2-Digit Patterns
+            - 11 12 13 (incremental)
+            - 20 20 20 (repeating)
+            - 01 01 01 (alternating)
+            - 32 42 52 (stepping)
+            
+            #### Exceptional Cases
+            - Ending with 123/555/777/999
+            """)
+
+        # Test cases
+        debug_mode = st.checkbox("Show test cases", False)
+        if debug_mode:
+            test_numbers = [
+                ("16109055580", False),  # 055580 → No pattern ✗
+                ("123456", True),       # 6-digit ascending ✓
+                ("444555", True),       # Double triplets ✓
+                ("121122", True),       # Similar triplets ✓ 
+                ("111213", True),       # Incremental pairs ✓
+                ("202020", True),       # Repeating pairs ✓
+                ("010101", True),       # Alternating pairs ✓
+                ("324252", True),       # Stepping pairs ✓
+                ("7900000123", True),   # Ends with 123 ✓
+                ("123458", False),      # No pattern ✗
+                ("112233", False),      # Not in our strict rules ✗
+                ("555555", True)        # 6 identical digits ✓
+            ]
+            
+            st.markdown("### Strict Policy Validation")
+            for number, expected in test_numbers:
+                is_fancy, pattern = is_fancy_number(number)
+                result = "PASS" if is_fancy == expected else "FAIL"
+                color = "green" if result == "PASS" else "red"
+                st.write(f"<span style='color:{color}'>{number[-6:]}: {result} ({pattern})</span>", unsafe_allow_html=True)
+
+    elif st.session_state.current_section == "late_login":
+        st.subheader("⏰ Late Login Report")
+        
+        if not is_killswitch_enabled():
+            with st.form("late_login_form"):
+                cols = st.columns(3)
+                presence_time = cols[0].text_input("Time of presence (HH:MM)", placeholder="08:30")
+                login_time = cols[1].text_input("Time of log in (HH:MM)", placeholder="09:15")
+                reason = cols[2].selectbox("Reason", [
+                    "Workspace Issue",
+                    "Avaya Issue",
+                    "Aaad Tool",
+                    "Windows Issue",
+                    "Reset Password"
+                ])
+                
+                if st.form_submit_button("Submit"):
+                    # Validate time formats
+                    try:
+                        datetime.strptime(presence_time, "%H:%M")
+                        datetime.strptime(login_time, "%H:%M")
+                        add_late_login(
+                            st.session_state.username,
+                            presence_time,
+                            login_time,
+                            reason
+                        )
+                        st.success("Late login reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 08:30)")
+        
+        st.subheader("Late Login Records")
+        late_logins = get_late_logins()
+        
+        if st.session_state.role == "admin":
+            if late_logins:
+                # Prepare data for download
+                data = []
+                for login in late_logins:
+                    _, agent, presence, login_time, reason, ts = login
+                    data.append({
+                        "Agent's Name": agent,
+                        "Time of presence": presence,
+                        "Time of log in": login_time,
+                        "Reason": reason
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                # Download button
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="late_logins.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_late_logins()
+                    st.rerun()
+            else:
+                st.info("No late login records found")
+        else:
+            # For agents, only show their own records
+            user_logins = [login for login in late_logins if login[1] == st.session_state.username]
+            if user_logins:
+                data = []
+                for login in user_logins:
+                    _, agent, presence, login_time, reason, ts = login
+                    data.append({
+                        "Agent's Name": agent,
+                        "Time of presence": presence,
+                        "Time of log in": login_time,
+                        "Reason": reason
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no late login records")
+
+    elif st.session_state.current_section == "quality_issues":
+        st.subheader("📞 Quality Related Technical Issue")
+        
+        if not is_killswitch_enabled():
+            with st.form("quality_issue_form"):
+                cols = st.columns(4)
+                issue_type = cols[0].selectbox("Type of issue", [
+                    "Blocage Physical Avaya",
+                    "Hold Than Call Drop",
+                    "Call Drop From Workspace",
+                    "Wrong Space Frozen"
+                ])
+                timing = cols[1].text_input("Timing (HH:MM)", placeholder="14:30")
+                mobile_number = cols[2].text_input("Mobile number")
+                product = cols[3].selectbox("Product", [
+                    "LM_CS_LMUSA_EN",
+                    "LM_CS_LMUSA_ES"
+                ])
+                
+                if st.form_submit_button("Submit"):
+                    try:
+                        datetime.strptime(timing, "%H:%M")
+                        add_quality_issue(
+                            st.session_state.username,
+                            issue_type,
+                            timing,
+                            mobile_number,
+                            product
+                        )
+                        st.success("Quality issue reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 14:30)")
+        
+        st.subheader("Quality Issue Records")
+        quality_issues = get_quality_issues()
+        
+        if st.session_state.role == "admin":
+            if quality_issues:
+                # Prepare data for download
+                data = []
+                for issue in quality_issues:
+                    _, agent, issue_type, timing, mobile, product, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Type of issue": issue_type,
+                        "Timing": timing,
+                        "Mobile number": mobile,
+                        "Product": product
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                # Download button
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="quality_issues.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_quality_issues()
+                    st.rerun()
+            else:
+                st.info("No quality issue records found")
+        else:
+            # For agents, only show their own records
+            user_issues = [issue for issue in quality_issues if issue[1] == st.session_state.username]
+            if user_issues:
+                data = []
+                for issue in user_issues:
+                    _, agent, issue_type, timing, mobile, product, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Type of issue": issue_type,
+                        "Timing": timing,
+                        "Mobile number": mobile,
+                        "Product": product
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no quality issue records")
+
+    elif st.session_state.current_section == "midshift_issues":
+        st.subheader("🔄 Mid-shift Technical Issue")
+        
+        if not is_killswitch_enabled():
+            with st.form("midshift_issue_form"):
+                cols = st.columns(3)
+                issue_type = cols[0].selectbox("Issue Type", [
+                    "Default Not Ready",
+                    "Frozen Workspace",
+                    "Physical Avaya",
+                    "Pc Issue",
+                    "Aaad Tool",
+                    "Disconnected Avaya"
+                ])
+                start_time = cols[1].text_input("Start time (HH:MM)", placeholder="10:00")
+                end_time = cols[2].text_input("End time (HH:MM)", placeholder="10:30")
+                
+                if st.form_submit_button("Submit"):
+                    try:
+                        datetime.strptime(start_time, "%H:%M")
+                        datetime.strptime(end_time, "%H:%M")
+                        add_midshift_issue(
+                            st.session_state.username,
+                            issue_type,
+                            start_time,
+                            end_time
+                        )
+                        st.success("Mid-shift issue reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 10:00)")
+        
+        st.subheader("Mid-shift Issue Records")
+        midshift_issues = get_midshift_issues()
+        
+        if st.session_state.role == "admin":
+            if midshift_issues:
+                # Prepare data for download
+                data = []
+                for issue in midshift_issues:
+                    _, agent, issue_type, start_time, end_time, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Issue Type": issue_type,
+                        "Start time": start_time,
+                        "End Time": end_time
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                # Download button
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="midshift_issues.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_midshift_issues()
+                    st.rerun()
+            else:
+                st.info("No mid-shift issue records found")
+        else:
+            # For agents, only show their own records
+            user_issues = [issue for issue in midshift_issues if issue[1] == st.session_state.username]
+            if user_issues:
+                data = []
+                for issue in user_issues:
+                    _, agent, issue_type, start_time, end_time, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Issue Type": issue_type,
+                        "Start time": start_time,
+                        "End Time": end_time
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no mid-shift issue records")
+
     elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
         if st.session_state.username.lower() == "taha kirri":
             st.subheader("🚨 System Killswitch")
@@ -1191,6 +1960,30 @@ else:
                         st.success("All break bookings deleted!")
                         st.rerun()
 
+        with st.expander("❌ Clear All Late Logins"):
+            with st.form("clear_late_logins_form"):
+                st.warning("This will permanently delete ALL late login records!")
+                if st.form_submit_button("Clear All Late Logins"):
+                    if clear_late_logins():
+                        st.success("All late login records deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Quality Issues"):
+            with st.form("clear_quality_issues_form"):
+                st.warning("This will permanently delete ALL quality issue records!")
+                if st.form_submit_button("Clear All Quality Issues"):
+                    if clear_quality_issues():
+                        st.success("All quality issue records deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Mid-shift Issues"):
+            with st.form("clear_midshift_issues_form"):
+                st.warning("This will permanently delete ALL mid-shift issue records!")
+                if st.form_submit_button("Clear All Mid-shift Issues"):
+                    if clear_midshift_issues():
+                        st.success("All mid-shift issue records deleted!")
+                        st.rerun()
+
         with st.expander("💣 Clear ALL Data"):
             with st.form("nuclear_form"):
                 st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
@@ -1201,6 +1994,9 @@ else:
                         clear_all_group_messages()
                         clear_hold_images()
                         clear_all_break_bookings()
+                        clear_late_logins()
+                        clear_quality_issues()
+                        clear_midshift_issues()
                         st.success("All system data deleted!")
                         st.rerun()
                     except Exception as e:
