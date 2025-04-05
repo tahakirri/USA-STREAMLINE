@@ -1250,6 +1250,10 @@ else:
             st.metric("Completed", completed)
         with col3:
             st.metric("Completion Rate", f"{rate:.1f}%")
+        if not df.empty:
+            st.dataframe(df)
+        else:
+            st.info("No data available")
         
         df = pd.DataFrame({
             'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
