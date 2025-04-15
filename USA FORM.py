@@ -723,31 +723,36 @@ def init_break_booking_db():
         """)
         
         # Insert default template if not exists
-        default_template = {
-            "description": "Default break schedule",
-            "shifts": {
-                "2pm": {
-                    "early_tea": {"start": "15:00", "end": "16:30", "slots": ["15:00", "15:15", "15:30", "15:45", "16:00", "16:15", "16:30"]},
-                    "lunch": {"start": "18:30", "end": "20:30", "slots": ["18:30", "19:00", "19:30", "20:00", "20:30"]},
-                    "late_tea": {"start": "20:45", "end": "21:30", "slots": ["20:45", "21:00", "21:15", "21:30"]},
-                },
-                "6pm": {
-                    "early_tea": {"start": "19:00", "end": "20:45", "slots": ["19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45"]},
-                    "lunch": {"start": "21:00", "end": "22:30", "slots": ["21:00", "21:30", "22:00", "22:30"]},
-                    "late_tea": {"start": "00:00", "end": "01:30", "slots": ["00:00", "00:15", "00:30", "00:45", "01:00", "01:15", "01:30"]},
+        cursor.execute("SELECT COUNT(*) FROM break_templates WHERE name = 'default'")
+        if cursor.fetchone()[0] == 0:
+            default_template = {
+                "description": "Default break schedule",
+                "shifts": {
+                    "2pm": {
+                        "early_tea": {"start": "15:00", "end": "16:30", "slots": ["15:00", "15:15", "15:30", "15:45", "16:00", "16:15", "16:30"]},
+                        "lunch": {"start": "18:30", "end": "20:30", "slots": ["18:30", "19:00", "19:30", "20:00", "20:30"]},
+                        "late_tea": {"start": "20:45", "end": "21:30", "slots": ["20:45", "21:00", "21:15", "21:30"]}
+                    },
+                    "6pm": {
+                        "early_tea": {"start": "19:00", "end": "20:45", "slots": ["19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45"]},
+                        "lunch": {"start": "21:00", "end": "22:30", "slots": ["21:00", "21:30", "22:00", "22:30"]},
+                        "late_tea": {"start": "00:00", "end": "01:30", "slots": ["00:00", "00:15", "00:30", "00:45", "01:00", "01:15", "01:30"]}
+                    }
                 }
             }
-        }
+            
+            cursor.execute("""
+                INSERT INTO break_templates (name, description, template_data)
+                VALUES (?, ?, ?)
+            """, ("default", "Default break schedule", json.dumps(default_template)))
         
-        cursor.execute("""
-            INSERT OR IGNORE INTO break_templates (name, description, template_data)
-            VALUES (?, ?, ?)
-        """, ("default", "Default break schedule", json.dumps(default_template)))
-        
-        cursor.execute("""
-            INSERT OR IGNORE INTO break_settings (id, max_per_slot, current_template)
-            VALUES (1, 3, 'default')
-        """)
+        # Ensure settings exist
+        cursor.execute("SELECT COUNT(*) FROM break_settings")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO break_settings (id, max_per_slot, current_template)
+                VALUES (1, 3, 'default')
+            """)
         
         conn.commit()
     finally:
@@ -1751,6 +1756,10 @@ def show_break_agent_interface():
     
     # Get current template and settings
     template = get_break_template()
+    if not template:
+        st.error("No break template found. Please contact an administrator.")
+        return
+        
     settings = get_break_settings()
     max_per_slot = settings["max_per_slot"]
     
