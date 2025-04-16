@@ -1,12 +1,15 @@
 import streamlit as st
 import sqlite3
 import hashlib
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import os
 import re
 from PIL import Image
 import io
 import pandas as pd
+import json
+import sys
+import traceback
 
 # --------------------------
 # Database Functions
@@ -14,162 +17,186 @@ import pandas as pd
 
 def get_db_connection():
     """Create and return a database connection."""
-    os.makedirs("data", exist_ok=True)
-    return sqlite3.connect("data/requests.db")
+    try:
+        # Ensure the data directory exists
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Create database connection with proper path handling
+        db_path = os.path.join(data_dir, "requests.db")
+        conn = sqlite3.connect(db_path)
+        
+        # Enable foreign key support
+        conn.execute("PRAGMA foreign_keys = ON")
+        
+        return conn
+    except Exception as e:
+        st.error(f"Database connection error: {str(e)}")
+        raise
 
 def hash_password(password):
+    """Hash a password using SHA-256."""
+    if not isinstance(password, str):
+        password = str(password)
     return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate(username, password):
+    """Authenticate a user and return their role."""
+    if not username or not password:
+        return None
+        
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute("SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
-                      (username, hashed_password))
+        cursor.execute(
+            "SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
+            (username.lower(), hashed_password)
+        )
         result = cursor.fetchone()
         return result[0] if result else None
+    except Exception as e:
+        st.error(f"Authentication error: {str(e)}")
+        return None
     finally:
         conn.close()
 
 def init_db():
-    conn = get_db_connection()
+    """Initialize the database with all necessary tables."""
+    conn = None
     try:
+        conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Create tables if they don't exist
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
+        # List of table creation statements
+        table_statements = [
+            # System settings table
+            """CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                killswitch_enabled INTEGER DEFAULT 0,
+                chat_killswitch_enabled INTEGER DEFAULT 0
+            )""",
+            
+            # Users table
+            """CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
-                role TEXT CHECK(role IN ('agent', 'admin')))
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS requests (
+                role TEXT CHECK(role IN ('agent', 'admin')),
+                is_vip INTEGER DEFAULT 0
+            )""",
+            
+            # Requests table
+            """CREATE TABLE IF NOT EXISTS requests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_name TEXT,
                 request_type TEXT,
                 identifier TEXT,
                 comment TEXT,
                 timestamp TEXT,
-                completed INTEGER DEFAULT 0)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS mistakes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_leader TEXT,
-                agent_name TEXT,
-                ticket_id TEXT,
-                error_description TEXT,
-                timestamp TEXT)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS group_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS hold_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uploader TEXT,
-                image_data BLOB,
-                timestamp TEXT)
-        """)
-        
-        # Handle system_settings table schema migration
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_settings'")
-        if not cursor.fetchone():
-            cursor.execute("""
-                CREATE TABLE system_settings (
-                    id INTEGER PRIMARY KEY DEFAULT 1,
-                    killswitch_enabled INTEGER DEFAULT 0,
-                    chat_killswitch_enabled INTEGER DEFAULT 0)
-            """)
-            cursor.execute("INSERT INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) VALUES (1, 0, 0)")
-        else:
-            cursor.execute("PRAGMA table_info(system_settings)")
-            columns = [column[1] for column in cursor.fetchall()]
-            if 'chat_killswitch_enabled' not in columns:
-                cursor.execute("ALTER TABLE system_settings ADD COLUMN chat_killswitch_enabled INTEGER DEFAULT 0")
-                cursor.execute("UPDATE system_settings SET chat_killswitch_enabled = 0 WHERE id = 1")
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS breaks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                break_name TEXT,
-                start_time TEXT,
-                end_time TEXT,
-                max_users INTEGER,
-                current_users INTEGER DEFAULT 0,
-                created_by TEXT,
-                timestamp TEXT)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS break_bookings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                break_id INTEGER,
-                user_id INTEGER,
-                username TEXT,
-                booking_date TEXT,
-                timestamp TEXT,
-                FOREIGN KEY(break_id) REFERENCES breaks(id))
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS request_comments (
+                completed INTEGER DEFAULT 0
+            )""",
+            
+            # Request comments table
+            """CREATE TABLE IF NOT EXISTS request_comments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 request_id INTEGER,
                 user TEXT,
                 comment TEXT,
                 timestamp TEXT,
-                FOREIGN KEY(request_id) REFERENCES requests(id))
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS late_logins (
+                FOREIGN KEY (request_id) REFERENCES requests (id)
+            )""",
+            
+            # Mistakes table
+            """CREATE TABLE IF NOT EXISTS mistakes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_leader TEXT,
+                agent_name TEXT,
+                ticket_id TEXT,
+                error_description TEXT,
+                timestamp TEXT
+            )""",
+            
+            # Group messages table
+            """CREATE TABLE IF NOT EXISTS group_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )""",
+            
+            # VIP messages table
+            """CREATE TABLE IF NOT EXISTS vip_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )""",
+            
+            # Hold images table
+            """CREATE TABLE IF NOT EXISTS hold_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uploader TEXT,
+                image_data BLOB,
+                timestamp TEXT
+            )""",
+            
+            # Late logins table
+            """CREATE TABLE IF NOT EXISTS late_logins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_name TEXT,
                 presence_time TEXT,
                 login_time TEXT,
                 reason TEXT,
-                timestamp TEXT)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS quality_issues (
+                timestamp TEXT
+            )""",
+            
+            # Quality issues table
+            """CREATE TABLE IF NOT EXISTS quality_issues (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_name TEXT,
                 issue_type TEXT,
                 timing TEXT,
                 mobile_number TEXT,
                 product TEXT,
-                timestamp TEXT)
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS midshift_issues (
+                timestamp TEXT
+            )""",
+            
+            # Midshift issues table
+            """CREATE TABLE IF NOT EXISTS midshift_issues (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_name TEXT,
                 issue_type TEXT,
                 start_time TEXT,
                 end_time TEXT,
-                timestamp TEXT)
+                timestamp TEXT
+            )"""
+        ]
+        
+        # Create all tables
+        for statement in table_statements:
+            try:
+                cursor.execute(statement)
+            except sqlite3.Error as e:
+                print(f"Error creating table: {str(e)}")
+                print(f"Statement: {statement}")
+                raise
+        
+        # Initialize system settings if not exists
+        cursor.execute("""
+            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) 
+            VALUES (1, 0, 0)
         """)
         
         # Create default admin account
         cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password, role) 
-            VALUES (?, ?, ?)
-        """, ("taha kirri", hash_password("arise@99"), "admin"))
+            INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+            VALUES (?, ?, ?, ?)
+        """, ("taha kirri", hash_password("arise@99"), "admin", 1))
+        
+        # Create other admin accounts
         admin_accounts = [
             ("taha kirri", "arise@99"),
             ("Issam Samghini", "admin@2025"),
@@ -179,12 +206,15 @@ def init_db():
         ]
         
         for username, password in admin_accounts:
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (username, password, role) 
-                VALUES (?, ?, ?)
-            """, (username, hash_password(password), "admin"))
+            try:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                    VALUES (?, ?, ?, ?)
+                """, (username, hash_password(password), "admin", 0))
+            except sqlite3.Error as e:
+                print(f"Error creating admin account for {username}: {str(e)}")
         
-        # Create agent accounts (agent name as username, workspace ID as password)
+        # Create agent accounts
         agents = [
             ("Karabila Younes", "30866"),
             ("Kaoutar Mzara", "30514"),
@@ -234,14 +264,39 @@ def init_db():
         ]
         
         for agent_name, workspace_id in agents:
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (username, password, role) 
-                VALUES (?, ?, ?)
-            """, (agent_name, hash_password(workspace_id), "agent"))
+            try:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                    VALUES (?, ?, ?, ?)
+                """, (agent_name, hash_password(workspace_id), "agent", 0))
+            except sqlite3.Error as e:
+                print(f"Error creating agent account for {agent_name}: {str(e)}")
+        
+        # Ensure taha kirri has VIP status
+        cursor.execute("""
+            UPDATE users SET is_vip = 1 WHERE LOWER(username) = 'taha kirri'
+        """)
         
         conn.commit()
+        print("Database initialized successfully")
+        
+    except Exception as e:
+        print(f"Database initialization error: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        raise
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
+# Initialize database when the module is loaded
+try:
+    init_db()
+except Exception as e:
+    st.error("Failed to initialize database. Please contact the administrator.")
+    print(f"Database initialization failed: {str(e)}")
 
 def is_killswitch_enabled():
     conn = get_db_connection()
@@ -574,148 +629,6 @@ def clear_all_group_messages():
     finally:
         conn.close()
 
-def add_break_slot(break_name, start_time, end_time, max_users, created_by):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO breaks (break_name, start_time, end_time, max_users, created_by, timestamp) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (break_name, start_time, end_time, max_users, created_by,
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-        return True
-    finally:
-        conn.close()
-
-def update_break_slot(break_id, break_name, start_time, end_time, max_users):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE breaks 
-            SET break_name = ?, start_time = ?, end_time = ?, max_users = ?
-            WHERE id = ?
-        """, (break_name, start_time, end_time, max_users, break_id))
-        conn.commit()
-        return True
-    finally:
-        conn.close()
-
-def get_all_break_slots():
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM breaks ORDER BY start_time")
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-def get_available_break_slots(date):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT b.* 
-            FROM breaks b
-            LEFT JOIN (
-                SELECT break_id, COUNT(*) as booking_count
-                FROM break_bookings 
-                WHERE booking_date = ?
-                GROUP BY break_id
-            ) bb ON b.id = bb.break_id
-            WHERE b.max_users > IFNULL(bb.booking_count, 0)
-            ORDER BY b.start_time
-        """, (date,))
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-def book_break_slot(break_id, user_id, username, booking_date):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO break_bookings (break_id, user_id, username, booking_date, timestamp) 
-            VALUES (?, ?, ?, ?, ?)
-        """, (break_id, user_id, username, booking_date,
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-        return True
-    finally:
-        conn.close()
-
-def get_user_bookings(username, date):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT bb.*, b.break_name, b.start_time, b.end_time
-            FROM break_bookings bb
-            JOIN breaks b ON bb.break_id = b.id
-            WHERE bb.username = ? AND bb.booking_date = ?
-        """, (username, date))
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-def get_all_bookings(date):
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT bb.*, b.break_name, b.start_time, b.end_time, u.role
-            FROM break_bookings bb
-            JOIN breaks b ON bb.break_id = b.id
-            JOIN users u ON bb.user_id = u.id
-            WHERE bb.booking_date = ?
-            ORDER BY b.start_time, bb.username
-        """, (date,))
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-def delete_break_slot(break_id):
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM breaks WHERE id = ?", (break_id,))
-        cursor.execute("DELETE FROM break_bookings WHERE break_id = ?", (break_id,))
-        conn.commit()
-        return True
-    finally:
-        conn.close()
-
-def clear_all_break_bookings():
-    if is_killswitch_enabled():
-        st.error("System is currently locked. Please contact the developer.")
-        return False
-        
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM break_bookings")
-        conn.commit()
-        return True
-    finally:
-        conn.close()
-
 def add_late_login(agent_name, presence_time, login_time, reason):
     if is_killswitch_enabled():
         st.error("System is currently locked. Please contact the developer.")
@@ -767,6 +680,8 @@ def get_quality_issues():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM quality_issues ORDER BY timestamp DESC")
         return cursor.fetchall()
+    except Exception as e:
+        st.error(f"Error fetching quality issues: {str(e)}")
     finally:
         conn.close()
 
@@ -785,6 +700,8 @@ def add_midshift_issue(agent_name, issue_type, start_time, end_time):
              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         return True
+    except Exception as e:
+        st.error(f"Error adding mid-shift issue: {str(e)}")
     finally:
         conn.close()
 
@@ -794,6 +711,8 @@ def get_midshift_issues():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM midshift_issues ORDER BY timestamp DESC")
         return cursor.fetchall()
+    except Exception as e:
+        st.error(f"Error fetching mid-shift issues: {str(e)}")
     finally:
         conn.close()
 
@@ -808,6 +727,8 @@ def clear_late_logins():
         cursor.execute("DELETE FROM late_logins")
         conn.commit()
         return True
+    except Exception as e:
+        st.error(f"Error clearing late logins: {str(e)}")
     finally:
         conn.close()
 
@@ -822,6 +743,8 @@ def clear_quality_issues():
         cursor.execute("DELETE FROM quality_issues")
         conn.commit()
         return True
+    except Exception as e:
+        st.error(f"Error clearing quality issues: {str(e)}")
     finally:
         conn.close()
 
@@ -836,1193 +759,1392 @@ def clear_midshift_issues():
         cursor.execute("DELETE FROM midshift_issues")
         conn.commit()
         return True
+    except Exception as e:
+        st.error(f"Error clearing mid-shift issues: {str(e)}")
+    finally:
+        conn.close()
+
+def send_vip_message(sender, message):
+    """Send a message in the VIP-only chat"""
+    if is_killswitch_enabled() or is_chat_killswitch_enabled():
+        st.error("Chat is currently locked. Please contact the developer.")
+        return False
+    
+    if not is_vip_user(sender) and sender.lower() != "taha kirri":
+        st.error("Only VIP users can send messages in this chat.")
+        return False
+        
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        mentions = re.findall(r'@(\w+)', message)
+        cursor.execute("""
+            INSERT INTO vip_messages (sender, message, timestamp, mentions) 
+            VALUES (?, ?, ?, ?)
+        """, (sender, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+             ','.join(mentions)))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+def get_vip_messages():
+    """Get messages from the VIP-only chat"""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM vip_messages ORDER BY timestamp DESC LIMIT 50")
+        return cursor.fetchall()
     finally:
         conn.close()
 
 # --------------------------
-# Fancy Number Checker Functions
+# Break Scheduling Functions (from first code)
 # --------------------------
 
-def is_sequential(digits, step=1):
-    """Check if digits form a sequential pattern with given step"""
+def init_break_session_state():
+    if 'templates' not in st.session_state:
+        st.session_state.templates = {}
+    if 'current_template' not in st.session_state:
+        st.session_state.current_template = None
+    if 'agent_bookings' not in st.session_state:
+        st.session_state.agent_bookings = {}
+    if 'selected_date' not in st.session_state:
+        st.session_state.selected_date = datetime.now().strftime('%Y-%m-%d')
+    if 'timezone_offset' not in st.session_state:
+        st.session_state.timezone_offset = 0  # GMT by default
+    if 'break_limits' not in st.session_state:
+        st.session_state.break_limits = {}
+    if 'active_templates' not in st.session_state:
+        st.session_state.active_templates = []
+    
+    # Load data from files if exists
+    if os.path.exists('templates.json'):
+        with open('templates.json', 'r') as f:
+            st.session_state.templates = json.load(f)
+    if os.path.exists('break_limits.json'):
+        with open('break_limits.json', 'r') as f:
+            st.session_state.break_limits = json.load(f)
+    if os.path.exists('all_bookings.json'):
+        with open('all_bookings.json', 'r') as f:
+            st.session_state.agent_bookings = json.load(f)
+    if os.path.exists('active_templates.json'):
+        with open('active_templates.json', 'r') as f:
+            st.session_state.active_templates = json.load(f)
+
+def adjust_template_time(time_str, hours):
+    """Adjust a single time string by adding/subtracting hours"""
     try:
-        return all(int(digits[i]) == int(digits[i-1]) + step for i in range(1, len(digits)))
+        if not time_str.strip():
+            return ""
+        time_obj = datetime.strptime(time_str.strip(), "%H:%M")
+        adjusted_time = (time_obj + timedelta(hours=hours)).time()
+        return adjusted_time.strftime("%H:%M")
     except:
+        return time_str
+
+def bulk_update_template_times(hours):
+    """Update all template times by adding/subtracting hours"""
+    if 'templates' not in st.session_state:
+        return False
+    
+    try:
+        for template_name in st.session_state.templates:
+            template = st.session_state.templates[template_name]
+            
+            # Update lunch breaks
+            template["lunch_breaks"] = [
+                adjust_template_time(t, hours) 
+                for t in template["lunch_breaks"]
+            ]
+            
+            # Update early tea breaks
+            template["tea_breaks"]["early"] = [
+                adjust_template_time(t, hours) 
+                for t in template["tea_breaks"]["early"]
+            ]
+            
+            # Update late tea breaks
+            template["tea_breaks"]["late"] = [
+                adjust_template_time(t, hours) 
+                for t in template["tea_breaks"]["late"]
+            ]
+        
+        save_break_data()
+        return True
+    except Exception as e:
+        st.error(f"Error updating template times: {str(e)}")
         return False
 
-def is_fancy_number(phone_number):
-    clean_number = re.sub(r'\D', '', phone_number)
-    
-    # Get last 6 digits according to Lycamobile policy
-    if len(clean_number) >= 6:
-        last_six = clean_number[-6:]
-        last_three = clean_number[-3:]
-    else:
-        return False, "Number too short (need at least 6 digits)"
-    
-    patterns = []
-    
-    # Special case for 13322866688
-    if clean_number == "13322866688":
-        patterns.append("Special VIP number (13322866688)")
-    
-    # Check for ABBBAA pattern (like 566655)
-    if (len(last_six) == 6 and 
-        last_six[0] == last_six[5] and 
-        last_six[1] == last_six[2] == last_six[3] and 
-        last_six[4] == last_six[0] and 
-        last_six[0] != last_six[1]):
-        patterns.append("ABBBAA pattern (e.g., 566655)")
-    
-    # Check for ABBBA pattern (like 233322)
-    if (len(last_six) >= 5 and 
-        last_six[0] == last_six[4] and 
-        last_six[1] == last_six[2] == last_six[3] and 
-        last_six[0] != last_six[1]):
-        patterns.append("ABBBA pattern (e.g., 233322)")
-    
-    # 1. 6-digit patterns (strict matches only)
-    # All same digits (666666)
-    if len(set(last_six)) == 1:
-        patterns.append("6 identical digits")
-        
-    # Consecutive ascending (123456)
-    if is_sequential(last_six, 1):
-        patterns.append("6-digit ascending sequence")
-        
-    # Consecutive descending (654321)
-    if is_sequential(last_six, -1):
-        patterns.append("6-digit descending sequence")
-        
-    # Palindrome (100001)
-    if last_six == last_six[::-1]:
-        patterns.append("6-digit palindrome")
-    
-    # 2. 3-digit patterns (strict matches from image)
-    first_triple = last_six[:3]
-    second_triple = last_six[3:]
-    
-    # Double triplets (444555)
-    if len(set(first_triple)) == 1 and len(set(second_triple)) == 1 and first_triple != second_triple:
-        patterns.append("Double triplets (444555)")
-    
-    # Similar triplets (121122)
-    if (first_triple[0] == first_triple[1] and 
-        second_triple[0] == second_triple[1] and 
-        first_triple[2] == second_triple[2]):
-        patterns.append("Similar triplets (121122)")
-    
-    # Repeating triplets (786786)
-    if first_triple == second_triple:
-        patterns.append("Repeating triplets (786786)")
-    
-    # Nearly sequential (457456) - exactly 1 digit difference
-    if abs(int(first_triple) - int(second_triple)) == 1:
-        patterns.append("Nearly sequential triplets (457456)")
-    
-    # 3. 2-digit patterns (strict matches from image)
-    # Incremental pairs (111213)
-    pairs = [last_six[i:i+2] for i in range(0, 5, 1)]
+def save_break_data():
+    with open('templates.json', 'w') as f:
+        json.dump(st.session_state.templates, f)
+    with open('break_limits.json', 'w') as f:
+        json.dump(st.session_state.break_limits, f)
+    with open('all_bookings.json', 'w') as f:
+        json.dump(st.session_state.agent_bookings, f)
+    with open('active_templates.json', 'w') as f:
+        json.dump(st.session_state.active_templates, f)
+
+def adjust_time(time_str, offset):
     try:
-        if all(int(pairs[i]) == int(pairs[i-1]) + 1 for i in range(1, len(pairs))):
-            patterns.append("Incremental pairs (111213)")
-    
-        # Repeating pairs (202020)
-        if (pairs[0] == pairs[2] == pairs[4] and 
-            pairs[1] == pairs[3] and 
-            pairs[0] != pairs[1]):
-            patterns.append("Repeating pairs (202020)")
-    
-        # Alternating pairs (010101)
-        if (pairs[0] == pairs[2] == pairs[4] and 
-            pairs[1] == pairs[3] and 
-            pairs[0] != pairs[1]):
-            patterns.append("Alternating pairs (010101)")
-    
-        # Stepping pairs (324252) - Fixed this check
-        if (all(int(pairs[i][0]) == int(pairs[i-1][0]) + 1 for i in range(1, len(pairs))) and
-            all(int(pairs[i][1]) == int(pairs[i-1][1]) + 2 for i in range(1, len(pairs)))):
-            patterns.append("Stepping pairs (324252)")
+        if not time_str.strip():
+            return ""
+        time_obj = datetime.strptime(time_str.strip(), "%H:%M")
+        adjusted_time = (time_obj + timedelta(hours=offset)).time()
+        return adjusted_time.strftime("%H:%M")
     except:
-        pass
+        return time_str
+
+def adjust_template_times(template, offset):
+    """Safely adjust template times with proper error handling"""
+    try:
+        if not template or not isinstance(template, dict):
+            return {
+                "lunch_breaks": [],
+                "tea_breaks": {"early": [], "late": []}
+            }
+            
+        adjusted_template = {
+            "lunch_breaks": [adjust_time(t, offset) for t in template.get("lunch_breaks", [])],
+            "tea_breaks": {
+                "early": [adjust_time(t, offset) for t in template.get("tea_breaks", {}).get("early", [])],
+                "late": [adjust_time(t, offset) for t in template.get("tea_breaks", {}).get("late", [])]
+            }
+        }
+        return adjusted_template
+    except Exception as e:
+        st.error(f"Error adjusting template times: {str(e)}")
+        return {
+            "lunch_breaks": [],
+            "tea_breaks": {"early": [], "late": []}
+        }
+
+def count_bookings(date, break_type, time_slot):
+    count = 0
+    if date in st.session_state.agent_bookings:
+        for agent_id, breaks in st.session_state.agent_bookings[date].items():
+            if break_type == "lunch" and "lunch" in breaks and breaks["lunch"] == time_slot:
+                count += 1
+            elif break_type == "early_tea" and "early_tea" in breaks and breaks["early_tea"] == time_slot:
+                count += 1
+            elif break_type == "late_tea" and "late_tea" in breaks and breaks["late_tea"] == time_slot:
+                count += 1
+    return count
+
+def display_schedule(template):
+    st.header("LM US ENG 3:00 PM shift")
     
-    # 4. Exceptional cases (must match exactly)
-    exceptional_triplets = ['123', '555', '777', '999']
-    if last_three in exceptional_triplets:
-        patterns.append(f"Exceptional case ({last_three})")
+    # Lunch breaks table
+    st.markdown("### LUNCH BREAKS")
+    lunch_df = pd.DataFrame({
+        "DATE": [st.session_state.selected_date],
+        **{time: [""] for time in template["lunch_breaks"]}
+    })
+    st.table(lunch_df)
     
-    # Strict validation - only allow patterns that exactly match our rules
-    valid_patterns = []
-    for p in patterns:
-        if any(rule in p for rule in [
-            "Special VIP number",
-            "ABBBAA pattern",
-            "ABBBA pattern",
-            "6 identical digits",
-            "6-digit ascending sequence",
-            "6-digit descending sequence",
-            "6-digit palindrome",
-            "Double triplets (444555)",
-            "Similar triplets (121122)",
-            "Repeating triplets (786786)",
-            "Nearly sequential triplets (457456)",
-            "Incremental pairs (111213)",
-            "Repeating pairs (202020)",
-            "Alternating pairs (010101)",
-            "Stepping pairs (324252)",
-            "Exceptional case"
-        ]):
-            valid_patterns.append(p)
+    st.markdown("**KINDLY RESPECT THE RULES BELOW**")
+    st.markdown("**Non Respect Of Break Rules = Incident**")
+    st.markdown("---")
     
-    return bool(valid_patterns), ", ".join(valid_patterns) if valid_patterns else "No qualifying fancy pattern"
+    # Tea breaks table
+    st.markdown("### TEA BREAK")
+    
+    # Create two columns for tea breaks
+    max_rows = max(len(template["tea_breaks"]["early"]), len(template["tea_breaks"]["late"]))
+    tea_data = {
+        "Early Tea Break": template["tea_breaks"]["early"] + [""] * (max_rows - len(template["tea_breaks"]["early"])),
+        "Late Tea Break": template["tea_breaks"]["late"] + [""] * (max_rows - len(template["tea_breaks"]["late"]))
+    }
+    tea_df = pd.DataFrame(tea_data)
+    st.table(tea_df)
+    
+    # Rules section
+    st.markdown("""
+    **NO BREAK IN THE LAST HOUR WILL BE AUTHORIZED**  
+    **PS: ONLY 5 MINUTES BIO IS AUTHORIZED IN THE LAST HHOUR BETWEEN 23:00 TILL 23:30 AND NO BREAK AFTER 23:30 !!!**  
+    **BREAKS SHOULD BE TAKEN AT THE NOTED TIME AND NEED TO BE CONFIRMED FROM RTA OR TEAM LEADERS**
+    """)
+
+def migrate_booking_data():
+    if 'agent_bookings' in st.session_state:
+        for date in st.session_state.agent_bookings:
+            for agent in st.session_state.agent_bookings[date]:
+                bookings = st.session_state.agent_bookings[date][agent]
+                if "lunch" in bookings and isinstance(bookings["lunch"], str):
+                    bookings["lunch"] = {
+                        "time": bookings["lunch"],
+                        "template": "Default Template",
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                if "early_tea" in bookings and isinstance(bookings["early_tea"], str):
+                    bookings["early_tea"] = {
+                        "time": bookings["early_tea"],
+                        "template": "Default Template",
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                if "late_tea" in bookings and isinstance(bookings["late_tea"], str):
+                    bookings["late_tea"] = {
+                        "time": bookings["late_tea"],
+                        "template": "Default Template",
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+        
+        save_break_data()
+
+def clear_all_bookings():
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Please contact the developer.")
+        return False
+    
+    try:
+        # Clear session state bookings
+        st.session_state.agent_bookings = {}
+        
+        # Clear the bookings file
+        if os.path.exists('all_bookings.json'):
+            with open('all_bookings.json', 'w') as f:
+                json.dump({}, f)
+        
+        # Save empty state to ensure it's propagated
+        save_break_data()
+        
+        # Force session state refresh
+        st.session_state.last_request_count = 0
+        st.session_state.last_mistake_count = 0
+        st.session_state.last_message_ids = []
+        
+        return True
+    except Exception as e:
+        st.error(f"Error clearing bookings: {str(e)}")
+        return False
+
+def admin_break_dashboard():
+    st.title("Break Schedule Management")
+    st.markdown("---")
+    
+    # Initialize templates if empty
+    if 'templates' not in st.session_state:
+        st.session_state.templates = {}
+    
+    # Create default template if no templates exist
+    if not st.session_state.templates:
+        default_template = {
+            "lunch_breaks": ["19:30", "20:00", "20:30", "21:00", "21:30"],
+            "tea_breaks": {
+                "early": ["16:00", "16:15", "16:30", "16:45", "17:00", "17:15", "17:30"],
+                "late": ["21:45", "22:00", "22:15", "22:30"]
+            }
+        }
+        st.session_state.templates["Default Template"] = default_template
+        st.session_state.current_template = "Default Template"
+        if "Default Template" not in st.session_state.active_templates:
+            st.session_state.active_templates.append("Default Template")
+        save_break_data()
+    
+    # Template Activation Management
+    st.subheader("🔄 Template Activation")
+    st.info("Only activated templates will be available for agents to book breaks from.")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.write("### Active Templates")
+        active_templates = st.session_state.active_templates
+        template_list = list(st.session_state.templates.keys())
+        
+        for template in template_list:
+            is_active = template in active_templates
+            if st.checkbox(f"{template} {'✅' if is_active else ''}", 
+                         value=is_active, 
+                         key=f"active_{template}"):
+                if template not in active_templates:
+                    active_templates.append(template)
+            else:
+                if template in active_templates:
+                    active_templates.remove(template)
+        
+        st.session_state.active_templates = active_templates
+        save_break_data()
+    
+    with col2:
+        st.write("### Statistics")
+        st.metric("Total Templates", len(template_list))
+        st.metric("Active Templates", len(active_templates))
+    
+    st.markdown("---")
+    
+    # Template Management
+    st.subheader("Template Management")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        template_name = st.text_input("New Template Name:")
+    with col2:
+        if st.button("Create Template"):
+            if template_name and template_name not in st.session_state.templates:
+                st.session_state.templates[template_name] = {
+                    "lunch_breaks": ["19:30", "20:00", "20:30", "21:00", "21:30"],
+                    "tea_breaks": {
+                        "early": ["16:00", "16:15", "16:30", "16:45", "17:00", "17:15", "17:30"],
+                        "late": ["21:45", "22:00", "22:15", "22:30"]
+                    }
+                }
+                save_break_data()
+                st.success(f"Template '{template_name}' created!")
+                st.rerun()
+    
+    # Template Selection and Editing
+    selected_template = st.selectbox(
+        "Select Template to Edit:",
+        list(st.session_state.templates.keys())
+    )
+    
+    if selected_template:
+        template = st.session_state.templates[selected_template]
+        
+        # Time adjustment buttons
+        st.subheader("Time Adjustment")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("➕ Add 1 Hour to All Times"):
+                bulk_update_template_times(1)
+                st.success("Added 1 hour to all break times")
+                st.rerun()
+        with col2:
+            if st.button("➖ Subtract 1 Hour from All Times"):
+                bulk_update_template_times(-1)
+                st.success("Subtracted 1 hour from all break times")
+                st.rerun()
+        
+        # Edit Lunch Breaks
+        st.subheader("Edit Lunch Breaks")
+        lunch_breaks = st.text_area(
+            "Enter lunch break times (one per line):",
+            "\n".join(template["lunch_breaks"]),
+            height=150
+        )
+        
+        # Edit Tea Breaks
+        st.subheader("Edit Tea Breaks")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("Early Tea Breaks")
+            early_tea = st.text_area(
+                "Enter early tea break times (one per line):",
+                "\n".join(template["tea_breaks"]["early"]),
+                height=200
+            )
+        
+        with col2:
+            st.write("Late Tea Breaks")
+            late_tea = st.text_area(
+                "Enter late tea break times (one per line):",
+                "\n".join(template["tea_breaks"]["late"]),
+                height=200
+            )
+        
+        # Break Limits
+        st.markdown("---")
+        st.subheader("Break Limits")
+        
+        if selected_template not in st.session_state.break_limits:
+            st.session_state.break_limits[selected_template] = {
+                "lunch": {time: 5 for time in template["lunch_breaks"]},
+                "early_tea": {time: 3 for time in template["tea_breaks"]["early"]},
+                "late_tea": {time: 3 for time in template["tea_breaks"]["late"]}
+            }
+        
+        limits = st.session_state.break_limits[selected_template]
+        
+        st.write("Lunch Break Limits")
+        cols = st.columns(len(template["lunch_breaks"]))
+        for i, time in enumerate(template["lunch_breaks"]):
+            with cols[i]:
+                limits["lunch"][time] = st.number_input(
+                    f"Max at {time}",
+                    min_value=1,
+                    value=limits["lunch"].get(time, 5),
+                    key=f"lunch_limit_{time}"
+                )
+        
+        st.write("Early Tea Break Limits")
+        cols = st.columns(len(template["tea_breaks"]["early"]))
+        for i, time in enumerate(template["tea_breaks"]["early"]):
+            with cols[i]:
+                limits["early_tea"][time] = st.number_input(
+                    f"Max at {time}",
+                    min_value=1,
+                    value=limits["early_tea"].get(time, 3),
+                    key=f"early_tea_limit_{time}"
+                )
+        
+        st.write("Late Tea Break Limits")
+        cols = st.columns(len(template["tea_breaks"]["late"]))
+        for i, time in enumerate(template["tea_breaks"]["late"]):
+            with cols[i]:
+                limits["late_tea"][time] = st.number_input(
+                    f"Max at {time}",
+                    min_value=1,
+                    value=limits["late_tea"].get(time, 3),
+                    key=f"late_tea_limit_{time}"
+                )
+        
+        # Consolidated save button
+        if st.button("Save All Changes", type="primary"):
+            template["lunch_breaks"] = [t.strip() for t in lunch_breaks.split("\n") if t.strip()]
+            template["tea_breaks"]["early"] = [t.strip() for t in early_tea.split("\n") if t.strip()]
+            template["tea_breaks"]["late"] = [t.strip() for t in late_tea.split("\n") if t.strip()]
+            save_break_data()
+            st.success("All changes saved successfully!")
+            st.rerun()
+        
+        if st.button("Delete Template") and len(st.session_state.templates) > 1:
+            del st.session_state.templates[selected_template]
+            if selected_template in st.session_state.active_templates:
+                st.session_state.active_templates.remove(selected_template)
+            save_break_data()
+            st.success(f"Template '{selected_template}' deleted!")
+            st.rerun()
+    
+    # View Bookings with template information
+    st.markdown("---")
+    st.subheader("View All Bookings")
+    
+    dates = list(st.session_state.agent_bookings.keys())
+    if dates:
+        selected_date = st.selectbox("Select Date:", dates, index=len(dates)-1)
+        
+        # Add clear bookings button with proper confirmation
+        if 'confirm_clear' not in st.session_state:
+            st.session_state.confirm_clear = False
+            
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if not st.session_state.confirm_clear:
+                if st.button("Clear All Bookings"):
+                    st.session_state.confirm_clear = True
+            
+        if st.session_state.confirm_clear:
+            st.warning("⚠️ Are you sure you want to clear all bookings? This cannot be undone!")
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("Yes, Clear All"):
+                    if clear_all_bookings():
+                        st.success("All bookings have been cleared!")
+                        st.session_state.confirm_clear = False
+                        st.rerun()
+            with col2:
+                if st.button("Cancel"):
+                    st.session_state.confirm_clear = False
+                    st.rerun()
+        
+        if selected_date in st.session_state.agent_bookings:
+            bookings_data = []
+            for agent, breaks in st.session_state.agent_bookings[selected_date].items():
+                # Get template name from any break type (they should all be the same)
+                template_name = None
+                for break_type in ['lunch', 'early_tea', 'late_tea']:
+                    if break_type in breaks and isinstance(breaks[break_type], dict):
+                        template_name = breaks[break_type].get('template', 'Unknown')
+                        break
+                
+                booking = {
+                    "Agent": agent,
+                    "Template": template_name or "Unknown",
+                    "Lunch": breaks.get("lunch", {}).get("time", "-") if isinstance(breaks.get("lunch"), dict) else breaks.get("lunch", "-"),
+                    "Early Tea": breaks.get("early_tea", {}).get("time", "-") if isinstance(breaks.get("early_tea"), dict) else breaks.get("early_tea", "-"),
+                    "Late Tea": breaks.get("late_tea", {}).get("time", "-") if isinstance(breaks.get("late_tea"), dict) else breaks.get("late_tea", "-")
+                }
+                bookings_data.append(booking)
+            
+            if bookings_data:
+                df = pd.DataFrame(bookings_data)
+                st.dataframe(df)
+                
+                # Export option
+                if st.button("Export to CSV"):
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "Download CSV",
+                        csv,
+                        f"break_bookings_{selected_date}.csv",
+                        "text/csv"
+                    )
+            else:
+                st.info("No bookings found for this date")
+    else:
+        st.info("No bookings available")
+
+def time_to_minutes(time_str):
+    """Convert time string (HH:MM) to minutes since midnight"""
+    try:
+        hours, minutes = map(int, time_str.split(':'))
+        return hours * 60 + minutes
+    except:
+        return None
+
+def times_overlap(time1, time2, duration_minutes=15):
+    """Check if two time slots overlap, assuming each break is duration_minutes long"""
+    t1 = time_to_minutes(time1)
+    t2 = time_to_minutes(time2)
+    
+    if t1 is None or t2 is None:
+        return False
+        
+    # Check if the breaks overlap
+    return abs(t1 - t2) < duration_minutes
+
+def check_break_conflicts(selected_breaks):
+    """Check for conflicts between selected breaks"""
+    times = []
+    
+    # Collect all selected break times
+    if selected_breaks.get("lunch"):
+        times.append(("lunch", selected_breaks["lunch"]))
+    if selected_breaks.get("early_tea"):
+        times.append(("early_tea", selected_breaks["early_tea"]))
+    if selected_breaks.get("late_tea"):
+        times.append(("late_tea", selected_breaks["late_tea"]))
+    
+    # Check each pair of breaks for overlap
+    for i in range(len(times)):
+        for j in range(i + 1, len(times)):
+            break1_type, break1_time = times[i]
+            break2_type, break2_time = times[j]
+            
+            if times_overlap(break1_time, break2_time, 30 if "lunch" in (break1_type, break2_type) else 15):
+                return f"Conflict detected between {break1_type.replace('_', ' ')} ({break1_time}) and {break2_type.replace('_', ' ')} ({break2_time})"
+    
+    return None
+
+def agent_break_dashboard():
+    st.title("Break Booking")
+    st.markdown("---")
+    
+    if is_killswitch_enabled():
+        st.error("System is currently locked. Break booking is disabled.")
+        return
+    
+    # Initialize session state
+    if 'agent_bookings' not in st.session_state:
+        st.session_state.agent_bookings = {}
+    if 'temp_bookings' not in st.session_state:
+        st.session_state.temp_bookings = {}
+    if 'booking_confirmed' not in st.session_state:
+        st.session_state.booking_confirmed = False
+    if 'selected_template_name' not in st.session_state:
+        st.session_state.selected_template_name = None
+    
+    agent_id = st.session_state.username
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Check if agent already has confirmed bookings
+    has_confirmed_bookings = (
+        current_date in st.session_state.agent_bookings and 
+        agent_id in st.session_state.agent_bookings[current_date]
+    )
+    
+    if has_confirmed_bookings:
+        st.success("Your breaks have been confirmed for today")
+        st.subheader("Your Confirmed Breaks")
+        bookings = st.session_state.agent_bookings[current_date][agent_id]
+        template_name = None
+        for break_type in ['lunch', 'early_tea', 'late_tea']:
+            if break_type in bookings and isinstance(bookings[break_type], dict):
+                template_name = bookings[break_type].get('template')
+                break
+        
+        if template_name:
+            st.info(f"Template: **{template_name}**")
+        
+        for break_type, display_name in [
+            ("lunch", "Lunch Break"),
+            ("early_tea", "Early Tea Break"),
+            ("late_tea", "Late Tea Break")
+        ]:
+            if break_type in bookings:
+                if isinstance(bookings[break_type], dict):
+                    st.write(f"**{display_name}:** {bookings[break_type]['time']}")
+                else:
+                    st.write(f"**{display_name}:** {bookings[break_type]}")
+        return
+    
+    # Step 1: Template Selection
+    if not st.session_state.selected_template_name:
+        st.subheader("Step 1: Select Break Schedule")
+        available_templates = st.session_state.active_templates
+        if not available_templates:
+            st.error("No break schedules available. Please contact admin.")
+            return
+        
+        selected_template = st.selectbox(
+            "Choose your break schedule:",
+            available_templates,
+            index=None,
+            placeholder="Select a template..."
+        )
+        
+        if selected_template:
+            if st.button("Continue to Break Selection"):
+                st.session_state.selected_template_name = selected_template
+                st.rerun()
+        return
+    
+    # Step 2: Break Selection
+    template = st.session_state.templates[st.session_state.selected_template_name]
+    
+    st.subheader("Step 2: Select Your Breaks")
+    st.info(f"Selected Template: **{st.session_state.selected_template_name}**")
+    
+    if st.button("Change Template"):
+        st.session_state.selected_template_name = None
+        st.session_state.temp_bookings = {}
+        st.rerun()
+    
+    # Break selection
+    with st.form("break_selection_form"):
+        st.write("**Lunch Break** (30 minutes)")
+        lunch_time = st.selectbox(
+            "Select Lunch Break",
+            [""] + template["lunch_breaks"],
+            format_func=lambda x: "No selection" if x == "" else x
+        )
+        
+        st.write("**Early Tea Break** (15 minutes)")
+        early_tea = st.selectbox(
+            "Select Early Tea Break",
+            [""] + template["tea_breaks"]["early"],
+            format_func=lambda x: "No selection" if x == "" else x
+        )
+        
+        st.write("**Late Tea Break** (15 minutes)")
+        late_tea = st.selectbox(
+            "Select Late Tea Break",
+            [""] + template["tea_breaks"]["late"],
+            format_func=lambda x: "No selection" if x == "" else x
+        )
+        
+        # Validate and confirm
+        if st.form_submit_button("Confirm Breaks"):
+            if not (lunch_time or early_tea or late_tea):
+                st.error("Please select at least one break.")
+                return
+            
+            # Check for time conflicts
+            selected_breaks = {
+                "lunch": lunch_time if lunch_time else None,
+                "early_tea": early_tea if early_tea else None,
+                "late_tea": late_tea if late_tea else None
+            }
+            
+            conflict = check_break_conflicts(selected_breaks)
+            if conflict:
+                st.error(conflict)
+                return
+            
+            # Check limits for each selected break
+            can_book = True
+            if lunch_time:
+                count = sum(1 for bookings in st.session_state.agent_bookings.get(current_date, {}).values()
+                           if isinstance(bookings.get("lunch"), dict) and bookings["lunch"]["time"] == lunch_time)
+                limit = st.session_state.break_limits.get(st.session_state.selected_template_name, {}).get("lunch", {}).get(lunch_time, 5)
+                if count >= limit:
+                    st.error(f"Lunch break at {lunch_time} is full.")
+                    can_book = False
+            
+            if early_tea:
+                count = sum(1 for bookings in st.session_state.agent_bookings.get(current_date, {}).values()
+                           if isinstance(bookings.get("early_tea"), dict) and bookings["early_tea"]["time"] == early_tea)
+                limit = st.session_state.break_limits.get(st.session_state.selected_template_name, {}).get("early_tea", {}).get(early_tea, 3)
+                if count >= limit:
+                    st.error(f"Early tea break at {early_tea} is full.")
+                    can_book = False
+            
+            if late_tea:
+                count = sum(1 for bookings in st.session_state.agent_bookings.get(current_date, {}).values()
+                           if isinstance(bookings.get("late_tea"), dict) and bookings["late_tea"]["time"] == late_tea)
+                limit = st.session_state.break_limits.get(st.session_state.selected_template_name, {}).get("late_tea", {}).get(late_tea, 3)
+                if count >= limit:
+                    st.error(f"Late tea break at {late_tea} is full.")
+                    can_book = False
+            
+            if can_book:
+                # Save the bookings
+                if current_date not in st.session_state.agent_bookings:
+                    st.session_state.agent_bookings[current_date] = {}
+                
+                bookings = {}
+                if lunch_time:
+                    bookings["lunch"] = {
+                        "time": lunch_time,
+                        "template": st.session_state.selected_template_name,
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                if early_tea:
+                    bookings["early_tea"] = {
+                        "time": early_tea,
+                        "template": st.session_state.selected_template_name,
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                if late_tea:
+                    bookings["late_tea"] = {
+                        "time": late_tea,
+                        "template": st.session_state.selected_template_name,
+                        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                
+                st.session_state.agent_bookings[current_date][agent_id] = bookings
+                save_break_data()
+                st.success("Your breaks have been confirmed!")
+                st.rerun()
+
+def is_vip_user(username):
+    """Check if a user has VIP status"""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_vip FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    finally:
+        conn.close()
+
+def set_vip_status(username, is_vip):
+    """Set or remove VIP status for a user"""
+    if not username:
+        return False
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET is_vip = ? WHERE username = ?", 
+                      (1 if is_vip else 0, username))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+# --------------------------
+# Streamlit Configuration
+# --------------------------
+
+st.set_page_config(
+    page_title="USA Team Management System",
+    page_icon="🌟",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Session state initialization
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'username' not in st.session_state:
+    st.session_state.username = None
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'is_vip' not in st.session_state:
+    st.session_state.is_vip = False
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .stButton button {
+        background-color: #1f77b4;
+        color: white;
+        border-radius: 5px;
+        padding: 0.5rem 1rem;
+        border: none;
+    }
+    .stButton button:hover {
+        background-color: #135c8d;
+    }
+    .success-message {
+        padding: 1rem;
+        background-color: #d4edda;
+        color: #155724;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .error-message {
+        padding: 1rem;
+        background-color: #f8d7da;
+        color: #721c24;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    .sidebar .sidebar-content {
+        background-color: #f8f9fa;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def logout():
+    """Clear session state and log out user."""
+    st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
+    st.session_state.is_vip = False
+    st.experimental_rerun()
+
+def login_page():
+    """Display the login page."""
+    st.title("USA Team Management System")
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    
+    with col2:
+        st.markdown("""
+            <div style='text-align: center; padding: 2rem;'>
+                <h2>Welcome! Please log in</h2>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        username = st.text_input("Username", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
+        
+        if st.button("Login", key="login_button"):
+            if username and password:
+                role = authenticate(username, password)
+                if role:
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.session_state.role = role
+                    
+                    # Check if user is VIP
+                    conn = get_db_connection()
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT is_vip FROM users WHERE username = ?", (username,))
+                        result = cursor.fetchone()
+                        st.session_state.is_vip = bool(result[0]) if result else False
+                    finally:
+                        conn.close()
+                    
+                    st.success("Login successful!")
+                    st.experimental_rerun()
+                else:
+                    st.error("Invalid username or password")
+            else:
+                st.warning("Please enter both username and password")
+
+def check_killswitch():
+    """Check if the system killswitch is enabled."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    finally:
+        conn.close()
+
+def check_chat_killswitch():
+    """Check if the chat killswitch is enabled."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chat_killswitch_enabled FROM system_settings WHERE id = 1")
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    finally:
+        conn.close()
+
+# Main application flow
+if not st.session_state.authenticated:
+    login_page()
+else:
+    # Check killswitch before proceeding
+    if check_killswitch() and st.session_state.role != 'admin':
+        st.error("The system is currently under maintenance. Please try again later.")
+        if st.button("Logout"):
+            logout()
+    else:
+        # Continue with the main application
+        st.sidebar.title(f"Welcome, {st.session_state.username}")
+        st.sidebar.text(f"Role: {st.session_state.role.capitalize()}")
+        
+        if st.sidebar.button("Logout"):
+            logout()
 
 # --------------------------
 # Streamlit App
 # --------------------------
 
-st.set_page_config(
-    page_title="Request Management System",
-    page_icon=":office:",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+def main():
+    """Main application entry point"""
+    try:
+        # Initialize session state for navigation
+        if "page" not in st.session_state:
+            st.session_state.page = "requests"
+        
+        # Initialize database
+        init_db()
+        
+        # Main application logic after authentication
+        if st.session_state.authenticated:
+            # Sidebar navigation
+            st.sidebar.title("Navigation")
+            
+            # Admin-specific options
+            if st.session_state.role == "admin":
+                page = st.sidebar.radio(
+                    "Select Section",
+                    ["Requests", "Mistakes", "Chat", "VIP Chat", "Break Schedule", 
+                     "Late Logins", "Quality Issues", "Midshift Issues", "System Settings"]
+                )
+            else:
+                page = st.sidebar.radio(
+                    "Select Section",
+                    ["Requests", "Chat", "Break Schedule"] + 
+                    (["VIP Chat"] if st.session_state.is_vip else [])
+                )
+            
+            st.session_state.page = page.lower()
+            
+            # Display selected page content
+            if st.session_state.page == "requests":
+                display_requests_page()
+            elif st.session_state.page == "mistakes":
+                display_mistakes_page()
+            elif st.session_state.page == "chat":
+                display_chat_page()
+            elif st.session_state.page == "vip chat":
+                display_vip_chat_page()
+            elif st.session_state.page == "break schedule":
+                if st.session_state.role == "admin":
+                    admin_break_dashboard()
+                else:
+                    agent_break_dashboard()
+            elif st.session_state.page == "late logins":
+                display_late_logins_page()
+            elif st.session_state.page == "quality issues":
+                display_quality_issues_page()
+            elif st.session_state.page == "midshift issues":
+                display_midshift_issues_page()
+            elif st.session_state.page == "system settings":
+                display_system_settings_page()
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+        print(f"Error details: {str(e)}")
+        traceback.print_exc()
 
-st.markdown("""
-<style>
-    .stApp { background-color: #121212; color: #E0E0E0; }
-    [data-testid="stSidebar"] { background-color: #1E1E1E; }
-    .stButton>button { background-color: #2563EB; color: white; }
-    .card { background-color: #1F1F1F; border-radius: 12px; padding: 1.5rem; }
-    .metric-card { background-color: #1F2937; border-radius: 10px; padding: 20px; }
-    .killswitch-active {
-        background-color: #4A1E1E;
-        border-left: 5px solid #D32F2F;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        color: #FFCDD2;
-    }
-    .chat-killswitch-active {
-        background-color: #1E3A4A;
-        border-left: 5px solid #1E88E5;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        color: #B3E5FC;
-    }
-    .comment-box {
-        margin: 0.5rem 0;
-        padding: 0.5rem;
-        background: #2D2D2D;
-        border-radius: 8px;
-    }
-    .comment-user {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 0.25rem;
-    }
-    .comment-text {
-        margin-top: 0.5rem;
-    }
-    .editable-break {
-        background-color: #2D3748;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
-    .stTimeInput > div > div > input {
-        padding: 0.5rem;
-    }
-    .time-input {
-        font-family: monospace;
-    }
-    /* Fancy number checker styles */
-    .fancy-number { color: #00ff00; font-weight: bold; }
-    .normal-number { color: #ffffff; }
-    .result-box { padding: 15px; border-radius: 5px; margin: 10px 0; }
-    .fancy-result { background-color: #1e3d1e; border: 1px solid #00ff00; }
-    .normal-result { background-color: #3d1e1e; border: 1px solid #ff0000; }
-</style>
-""", unsafe_allow_html=True)
-
-if "authenticated" not in st.session_state:
-    st.session_state.update({
-        "authenticated": False,
-        "role": None,
-        "username": None,
-        "current_section": "requests",
-        "last_request_count": 0,
-        "last_mistake_count": 0,
-        "last_message_ids": [],
-        "break_edits": {}
-    })
-
-init_db()
-
-if not st.session_state.authenticated:
-    col1, col2, col3 = st.columns([1, 2, 1])
+def display_requests_page():
+    """Display the requests management page"""
+    st.title("Request Management")
+    
+    # Add new request section
+    st.subheader("Submit New Request")
+    with st.form("new_request_form"):
+        request_type = st.selectbox(
+            "Request Type",
+            ["Technical Issue", "System Access", "Software Installation", 
+             "Hardware Problem", "Other"]
+        )
+        identifier = st.text_input("Ticket/Reference ID")
+        comment = st.text_area("Description")
+        
+        if st.form_submit_button("Submit Request"):
+            if identifier and comment:
+                if add_request(st.session_state.username, request_type, identifier, comment):
+                    st.success("Request submitted successfully!")
+                    st.rerun()
+            else:
+                st.error("Please fill in all fields")
+    
+    # View requests section
+    st.subheader("View Requests")
+    search_query = st.text_input("Search requests...", key="request_search")
+    
+    col1, col2 = st.columns([3, 1])
     with col2:
-        st.title("🏢 Request Management System")
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Login"):
-                if username and password:
-                    role = authenticate(username, password)
-                    if role:
-                        st.session_state.update({
-                            "authenticated": True,
-                            "role": role,
-                            "username": username,
-                            "last_request_count": len(get_requests()),
-                            "last_mistake_count": len(get_mistakes()),
-                            "last_message_ids": [msg[0] for msg in get_group_messages()]
-                        })
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials")
-
-else:
-    if is_killswitch_enabled():
-        st.markdown("""
-        <div class="killswitch-active">
-            <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
-            <p>The system is currently in read-only mode.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    elif is_chat_killswitch_enabled():
-        st.markdown("""
-        <div class="chat-killswitch-active">
-            <h3>⚠️ CHAT LOCKED ⚠️</h3>
-            <p>The chat functionality is currently disabled.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    def show_notifications():
-        current_requests = get_requests()
-        current_mistakes = get_mistakes()
-        current_messages = get_group_messages()
-        
-        new_requests = len(current_requests) - st.session_state.last_request_count
-        if new_requests > 0 and st.session_state.last_request_count > 0:
-            st.toast(f"📋 {new_requests} new request(s) submitted!")
-        st.session_state.last_request_count = len(current_requests)
-        
-        new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
-        if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
-            st.toast(f"❌ {new_mistakes} new mistake(s) reported!")
-        st.session_state.last_mistake_count = len(current_mistakes)
-        
-        current_message_ids = [msg[0] for msg in current_messages]
-        new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
-        for msg in new_messages:
-            if msg[1] != st.session_state.username:
-                mentions = msg[4].split(',') if msg[4] else []
-                if st.session_state.username in mentions:
-                    st.toast(f"💬 You were mentioned by {msg[1]}!")
-                else:
-                    st.toast(f"💬 New message from {msg[1]}!")
-        st.session_state.last_message_ids = current_message_ids
-
-    show_notifications()
-
-    with st.sidebar:
-        st.title(f"👋 Welcome, {st.session_state.username}")
-        st.markdown("---")
-        
-        nav_options = [
-            ("📋 Requests", "requests"),
-            ("📊 Dashboard", "dashboard"),
-            ("☕ Breaks", "breaks"),
-            ("🖼️ HOLD", "hold"),
-            ("❌ Mistakes", "mistakes"),
-            ("💬 Chat", "chat"),
-            ("📱 Fancy Number", "fancy_number"),
-            ("⏰ Late Login", "late_login"),
-            ("📞 Quality Issues", "quality_issues"),
-            ("🔄 Mid-shift Issues", "midshift_issues")
-        ]
-        if st.session_state.role == "admin":
-            nav_options.append(("⚙️ Admin", "admin"))
-        
-        for option, value in nav_options:
-            if st.button(option, key=f"nav_{value}"):
-                st.session_state.current_section = value
-                
-        st.markdown("---")
-        pending_requests = len([r for r in get_requests() if not r[6]])
-        new_mistakes = len(get_mistakes())
-        unread_messages = len([m for m in get_group_messages() 
-                             if m[0] not in st.session_state.last_message_ids 
-                             and m[1] != st.session_state.username])
-        
-        st.markdown(f"""
-        <div style="margin-bottom: 20px;">
-            <h4>🔔 Notifications</h4>
-            <p>📋 Pending requests: {pending_requests}</p>
-            <p>❌ Recent mistakes: {new_mistakes}</p>
-            <p>💬 Unread messages: {unread_messages}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🚪 Logout"):
-            st.session_state.authenticated = False
-            st.rerun()
-
-    st.title(st.session_state.current_section.title())
-
-    if st.session_state.current_section == "requests":
-        if not is_killswitch_enabled():
-            with st.expander("➕ Submit New Request"):
-                with st.form("request_form"):
-                    cols = st.columns([1, 3])
-                    request_type = cols[0].selectbox("Type", ["Email", "Phone", "Ticket"])
-                    identifier = cols[1].text_input("Identifier")
-                    comment = st.text_area("Comment")
-                    if st.form_submit_button("Submit"):
-                        if identifier and comment:
-                            if add_request(st.session_state.username, request_type, identifier, comment):
-                                st.success("Request submitted successfully!")
-                                st.rerun()
-        
-        st.subheader("🔍 Search Requests")
-        search_query = st.text_input("Search requests...")
-        requests = search_requests(search_query) if search_query else get_requests()
-        
-        st.subheader("All Requests")
+        show_completed = st.checkbox("Show Completed", value=False)
+    
+    requests = search_requests(search_query) if search_query else get_requests()
+    
+    if requests:
         for req in requests:
-            req_id, agent, req_type, identifier, comment, timestamp, completed = req
-            with st.container():
-                cols = st.columns([0.1, 0.9])
-                with cols[0]:
-                    if not is_killswitch_enabled():
-                        st.checkbox("Done", value=bool(completed), 
-                                   key=f"check_{req_id}", 
-                                   on_change=update_request_status,
-                                   args=(req_id, not completed))
-                    else:
-                        st.checkbox("Done", value=bool(completed), disabled=True)
-                with cols[1]:
-                    st.markdown(f"""
-                    <div class="card">
-                        <div style="display: flex; justify-content: space-between;">
-                            <h4>#{req_id} - {req_type}</h4>
-                            <small>{timestamp}</small>
-                        </div>
-                        <p>Agent: {agent}</p>
-                        <p>Identifier: {identifier}</p>
-                        <div style="margin-top: 1rem;">
-                            <h5>Status Updates:</h5>
-                    """, unsafe_allow_html=True)
-                    
-                    comments = get_request_comments(req_id)
-                    for comment in comments:
-                        cmt_id, _, user, cmt_text, cmt_time = comment
-                        st.markdown(f"""
-                            <div class="comment-box">
-                                <div class="comment-user">
-                                    <small><strong>{user}</strong></small>
-                                    <small>{cmt_time}</small>
-                                </div>
-                                <div class="comment-text">{cmt_text}</div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    if st.session_state.role == "admin" and not is_killswitch_enabled():
-                        with st.form(key=f"comment_form_{req_id}"):
-                            new_comment = st.text_input("Add status update/comment")
-                            if st.form_submit_button("Add Comment"):
-                                if new_comment:
-                                    add_request_comment(req_id, st.session_state.username, new_comment)
-                                    st.rerun()
-
-    elif st.session_state.current_section == "dashboard":
-        st.subheader("📊 Request Completion Dashboard")
-        all_requests = get_requests()
-        total = len(all_requests)
-        completed = sum(1 for r in all_requests if r[6])
-        rate = (completed/total*100) if total > 0 else 0
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Requests", total)
-        with col2:
-            st.metric("Completed", completed)
-        with col3:
-            st.metric("Completion Rate", f"{rate:.1f}%")
-        
-        df = pd.DataFrame({
-            'Date': [datetime.strptime(r[5], "%Y-%m-%d %H:%M:%S").date() for r in all_requests],
-            'Status': ['Completed' if r[6] else 'Pending' for r in all_requests],
-            'Type': [r[2] for r in all_requests]
-        })
-        
-        st.subheader("Request Trends")
-        st.bar_chart(df['Date'].value_counts())
-        
-        st.subheader("Request Type Distribution")
-        type_counts = df['Type'].value_counts().reset_index()
-        type_counts.columns = ['Type', 'Count']
-        st.bar_chart(type_counts.set_index('Type'))
-
-    elif st.session_state.current_section == "breaks":
-        today = datetime.now().strftime("%Y-%m-%d")
-        selected_date = st.date_input("Select date", datetime.now())
-        formatted_date = selected_date.strftime("%Y-%m-%d")
-        
-        if st.session_state.role == "admin":
-            st.subheader("Admin: Break Schedule Management")
-            
-            with st.expander("➕ Add New Break Slot"):
-                with st.form("add_break_form"):
-                    cols = st.columns(3)
-                    break_name = cols[0].text_input("Break Name")
-                    start_time = cols[1].text_input("Start Time (HH:MM)")
-                    end_time = cols[2].text_input("End Time (HH:MM)")
-                    max_users = st.number_input("Max Users", min_value=1, value=1)
-                    
-                    if st.form_submit_button("Add Break Slot"):
-                        if break_name:
-                            try:
-                                # Validate time formats
-                                datetime.strptime(start_time, "%H:%M")
-                                datetime.strptime(end_time, "%H:%M")
-                                add_break_slot(
-                                    break_name,
-                                    start_time,
-                                    end_time,
-                                    max_users,
-                                    st.session_state.username
-                                )
-                                st.success("Break slot added successfully!")
-                                st.rerun()
-                            except ValueError:
-                                st.error("Invalid time format. Please use HH:MM format (e.g., 08:30)")
-            
-            st.subheader("Current Break Schedule")
-            breaks = get_all_break_slots()
-            
-            # Initialize break_edits if not exists
-            if "break_edits" not in st.session_state:
-                st.session_state.break_edits = {}
-            
-            # Store current edits
-            for b in breaks:
-                b_id, name, start, end, max_u, curr_u, created_by, ts = b
-                if b_id not in st.session_state.break_edits:
-                    st.session_state.break_edits[b_id] = {
-                        "break_name": name,
-                        "start_time": start,
-                        "end_time": end,
-                        "max_users": max_u
-                    }
-            
-            # Display editable breaks
-            for b in breaks:
-                b_id, name, start, end, max_u, curr_u, created_by, ts = b
-                with st.container():
-                    st.markdown(f"<div class='editable-break'>", unsafe_allow_html=True)
-                    
-                    cols = st.columns([3, 2, 2, 1, 1])
-                    with cols[0]:
-                        st.session_state.break_edits[b_id]["break_name"] = st.text_input(
-                            "Break Name", 
-                            value=st.session_state.break_edits[b_id]["break_name"],
-                            key=f"name_{b_id}"
-                        )
-                    with cols[1]:
-                        st.session_state.break_edits[b_id]["start_time"] = st.text_input(
-                            "Start Time (HH:MM)", 
-                            value=st.session_state.break_edits[b_id]["start_time"],
-                            key=f"start_{b_id}"
-                        )
-                    with cols[2]:
-                        st.session_state.break_edits[b_id]["end_time"] = st.text_input(
-                            "End Time (HH:MM)", 
-                            value=st.session_state.break_edits[b_id]["end_time"],
-                            key=f"end_{b_id}"
-                        )
-                    with cols[3]:
-                        st.session_state.break_edits[b_id]["max_users"] = st.number_input(
-                            "Max Users", 
-                            min_value=1,
-                            value=st.session_state.break_edits[b_id]["max_users"],
-                            key=f"max_{b_id}"
-                        )
-                    with cols[4]:
-                        if st.button("❌", key=f"del_{b_id}"):
-                            delete_break_slot(b_id)
+            if not show_completed and req[5]:  # Skip completed requests if not showing
+                continue
+                
+            with st.expander(
+                f"{req[2]} - {req[3]} ({req[1]}) - {'✅' if req[5] else '🔄'}"
+            ):
+                st.write(f"**Type:** {req[2]}")
+                st.write(f"**Agent:** {req[1]}")
+                st.write(f"**ID:** {req[3]}")
+                st.write(f"**Description:** {req[4]}")
+                st.write(f"**Submitted:** {req[5]}")
+                
+                # Comments section
+                st.subheader("Comments")
+                comments = get_request_comments(req[0])
+                for comment in comments:
+                    st.text(f"{comment[2]} ({comment[4]}): {comment[3]}")
+                
+                # Add comment form
+                new_comment = st.text_input("Add comment", key=f"comment_{req[0]}")
+                if st.button("Add Comment", key=f"add_comment_{req[0]}"):
+                    if new_comment:
+                        if add_request_comment(req[0], st.session_state.username, new_comment):
+                            st.success("Comment added!")
                             st.rerun()
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Single save button for all changes
-            if st.button("💾 Save All Changes"):
-                errors = []
-                for b_id, edits in st.session_state.break_edits.items():
-                    try:
-                        # Validate time format
-                        datetime.strptime(edits["start_time"], "%H:%M")
-                        datetime.strptime(edits["end_time"], "%H:%M")
-                        update_break_slot(
-                            b_id,
-                            edits["break_name"],
-                            edits["start_time"],
-                            edits["end_time"],
-                            edits["max_users"]
-                        )
-                    except ValueError as e:
-                        errors.append(f"Break ID {b_id}: Invalid time format. Please use HH:MM format.")
-                        continue
                 
-                if errors:
-                    for error in errors:
-                        st.error(error)
-                else:
-                    st.success("All changes saved successfully!")
-                    st.rerun()
-            
-            st.markdown("---")
-            st.subheader("All Bookings for Selected Date")
-            try:
-                bookings = get_all_bookings(formatted_date)
-                if bookings:
-                    for b in bookings:
-                        b_id, break_id, user_id, username, date, ts, break_name, start, end, role = b
-                        st.write(f"{username} ({role}) - {break_name} ({start} - {end})")
-                else:
-                    st.info("No bookings for selected date")
-            except Exception as e:
-                st.error(f"Error loading bookings: {str(e)}")
-            
-            if st.button("Clear All Bookings", key="clear_all_bookings"):
-                clear_all_break_bookings()
-                st.rerun()
-        
-        else:
-            st.subheader("Available Break Slots")
-            try:
-                available_breaks = get_available_break_slots(formatted_date)
-                
-                if available_breaks:
-                    for b in available_breaks:
-                        b_id, name, start, end, max_u, curr_u, created_by, ts = b
-                        
-                        try:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                SELECT COUNT(*) 
-                                FROM break_bookings 
-                                WHERE break_id = ? AND booking_date = ?
-                            """, (b_id, formatted_date))
-                            booked_count = cursor.fetchone()[0]
-                            remaining = max_u - booked_count
-                        except Exception as e:
-                            st.error(f"Error checking availability: {str(e)}")
-                            continue
-                        finally:
-                            conn.close()
-                        
-                        with st.container():
-                            cols = st.columns([3, 2, 1])
-                            cols[0].write(f"*{name}* ({start} - {end})")
-                            cols[1].write(f"Available slots: {remaining}/{max_u}")
-                            
-                            if cols[2].button("Book", key=f"book_{b_id}"):
-                                try:
-                                    conn = get_db_connection()
-                                    cursor = conn.cursor()
-                                    cursor.execute("SELECT id FROM users WHERE username = ?", 
-                                                (st.session_state.username,))
-                                    user_id = cursor.fetchone()[0]
-                                    book_break_slot(b_id, user_id, st.session_state.username, formatted_date)
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error booking slot: {str(e)}")
-                                finally:
-                                    conn.close()
-            except Exception as e:
-                st.error(f"Error loading break slots: {str(e)}")
-            
-            st.markdown("---")
-            st.subheader("Your Bookings")
-            try:
-                user_bookings = get_user_bookings(st.session_state.username, formatted_date)
-                
-                if user_bookings:
-                    for b in user_bookings:
-                        b_id, break_id, user_id, username, date, ts, break_name, start, end = b
-                        st.write(f"{break_name} ({start} - {end})")
-                else:
-                    st.info("You have no bookings for selected date")
-            except Exception as e:
-                st.error(f"Error loading your bookings: {str(e)}")
+                # Toggle completion status (admin only)
+                if st.session_state.role == "admin":
+                    if st.button(
+                        "Mark as Complete" if not req[5] else "Reopen",
+                        key=f"toggle_{req[0]}"
+                    ):
+                        if update_request_status(req[0], not req[5]):
+                            st.success(
+                                "Request marked as complete!" if not req[5] 
+                                else "Request reopened!"
+                            )
+                            st.rerun()
+    else:
+        st.info("No requests found")
 
-    elif st.session_state.current_section == "mistakes":
-        if not is_killswitch_enabled():
-            with st.expander("➕ Report New Mistake"):
-                with st.form("mistake_form"):
-                    cols = st.columns(3)
-                    agent_name = cols[0].text_input("Agent Name")
-                    ticket_id = cols[1].text_input("Ticket ID")
-                    error_description = st.text_area("Error Description")
-                    if st.form_submit_button("Submit"):
-                        if agent_name and ticket_id and error_description:
-                            add_mistake(st.session_state.username, agent_name, ticket_id, error_description)
+def display_mistakes_page():
+    """Display the mistakes tracking page"""
+    if st.session_state.role != "admin":
+        st.error("Access denied")
+        return
         
-        st.subheader("🔍 Search Mistakes")
-        search_query = st.text_input("Search mistakes...")
-        mistakes = search_mistakes(search_query) if search_query else get_mistakes()
+    st.title("Mistake Tracking")
+    
+    # Add new mistake section
+    st.subheader("Record New Mistake")
+    with st.form("new_mistake_form"):
+        agent_name = st.selectbox(
+            "Agent Name",
+            [user[1] for user in get_all_users() if user[2] == "agent"]
+        )
+        ticket_id = st.text_input("Ticket ID")
+        error_description = st.text_area("Error Description")
         
-        st.subheader("Mistakes Log")
+        if st.form_submit_button("Record Mistake"):
+            if agent_name and ticket_id and error_description:
+                if add_mistake(st.session_state.username, agent_name, ticket_id, 
+                             error_description):
+                    st.success("Mistake recorded successfully!")
+                    st.rerun()
+            else:
+                st.error("Please fill in all fields")
+    
+    # View mistakes section
+    st.subheader("View Mistakes")
+    search_query = st.text_input("Search mistakes...", key="mistake_search")
+    
+    mistakes = search_mistakes(search_query) if search_query else get_mistakes()
+    
+    if mistakes:
         for mistake in mistakes:
-            m_id, tl, agent, ticket, error, ts = mistake
-            st.markdown(f"""
-            <div class="card">
-                <div style="display: flex; justify-content: space-between;">
-                    <h4>#{m_id}</h4>
-                    <small>{ts}</small>
-                </div>
-                <p>Agent: {agent}</p>
-                <p>Ticket: {ticket}</p>
-                <p>Error: {error}</p>
-            </div>
-            """, unsafe_allow_html=True)
+            with st.expander(f"{mistake[2]} - {mistake[3]}"):
+                st.write(f"**Team Leader:** {mistake[1]}")
+                st.write(f"**Agent:** {mistake[2]}")
+                st.write(f"**Ticket ID:** {mistake[3]}")
+                st.write(f"**Description:** {mistake[4]}")
+                st.write(f"**Recorded:** {mistake[5]}")
+    else:
+        st.info("No mistakes found")
 
-    elif st.session_state.current_section == "chat":
-        if is_chat_killswitch_enabled():
-            st.warning("Chat functionality is currently disabled by the administrator.")
-        else:
-            messages = get_group_messages()
-            for msg in reversed(messages):
-                msg_id, sender, message, ts, mentions = msg
-                is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+def display_chat_page():
+    """Display the group chat page"""
+    st.title("Group Chat")
+    
+    if check_chat_killswitch():
+        st.error("Chat is currently disabled")
+        return
+    
+    # Message input
+    with st.form("new_message_form"):
+        message = st.text_area("Type your message")
+        if st.form_submit_button("Send"):
+            if message:
+                if send_group_message(st.session_state.username, message):
+                    st.success("Message sent!")
+                    st.rerun()
+            else:
+                st.error("Please enter a message")
+    
+    # Display messages
+    st.subheader("Messages")
+    messages = get_group_messages()
+    
+    if messages:
+        for msg in messages:
+            with st.container():
                 st.markdown(f"""
-                <div style="background-color: {'#3b82f6' if is_mentioned else '#1F1F1F'};
-                            padding: 1rem;
-                            border-radius: 8px;
-                            margin-bottom: 1rem;">
-                    <strong>{sender}</strong>: {message}<br>
-                    <small>{ts}</small>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            if not is_killswitch_enabled():
-                with st.form("chat_form"):
-                    message = st.text_input("Type your message...")
-                    if st.form_submit_button("Send"):
-                        if message:
-                            send_group_message(st.session_state.username, message)
-                            st.rerun()
-
-    elif st.session_state.current_section == "hold":
-        if st.session_state.role == "admin" and not is_killswitch_enabled():
-            with st.expander("📤 Upload Image"):
-                img = st.file_uploader("Choose image", type=["jpg", "png", "jpeg"])
-                if img:
-                    add_hold_image(st.session_state.username, img.read())
-        
-        images = get_hold_images()
-        if images:
-            for img in images:
-                iid, uploader, data, ts = img
-                st.markdown(f"""
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between;">
-                        <h4>Image #{iid}</h4>
-                        <small>{ts}</small>
+                    <div style='padding: 10px; border-radius: 5px; margin: 5px 0;
+                         background-color: {"#1e293b" if msg[1] == st.session_state.username else "#334155"}'>
+                        <strong>{msg[1]}</strong> <small>{msg[3]}</small><br>
+                        {msg[2]}
                     </div>
-                    <p>Uploaded by: {uploader}</p>
-                </div>
                 """, unsafe_allow_html=True)
-                st.image(Image.open(io.BytesIO(data)), use_container_width=True)
+    else:
+        st.info("No messages yet")
+
+def display_vip_chat_page():
+    """Display the VIP chat page"""
+    if not st.session_state.is_vip and st.session_state.username.lower() != "taha kirri":
+        st.error("Access denied")
+        return
+        
+    st.title("VIP Chat")
+    
+    if check_chat_killswitch():
+        st.error("Chat is currently disabled")
+        return
+    
+    # Message input
+    with st.form("new_vip_message_form"):
+        message = st.text_area("Type your message")
+        if st.form_submit_button("Send"):
+            if message:
+                if send_vip_message(st.session_state.username, message):
+                    st.success("Message sent!")
+                    st.rerun()
+            else:
+                st.error("Please enter a message")
+    
+    # Display messages
+    st.subheader("Messages")
+    messages = get_vip_messages()
+    
+    if messages:
+        for msg in messages:
+            with st.container():
+                st.markdown(f"""
+                    <div style='padding: 10px; border-radius: 5px; margin: 5px 0;
+                         background-color: {"#1e293b" if msg[1] == st.session_state.username else "#334155"}'>
+                        <strong>{msg[1]}</strong> <small>{msg[3]}</small><br>
+                        {msg[2]}
+                    </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("No messages yet")
+
+def display_late_logins_page():
+    """Display the late logins tracking page"""
+    if st.session_state.role != "admin":
+        st.error("Access denied")
+        return
+        
+    st.title("Late Login Tracking")
+    
+    # Add new late login
+    st.subheader("Record Late Login")
+    with st.form("new_late_login_form"):
+        agent_name = st.selectbox(
+            "Agent Name",
+            [user[1] for user in get_all_users() if user[2] == "agent"]
+        )
+        presence_time = st.time_input("Presence Time")
+        login_time = st.time_input("Login Time")
+        reason = st.text_area("Reason")
+        
+        if st.form_submit_button("Record Late Login"):
+            if agent_name and reason:
+                if add_late_login(agent_name, presence_time.strftime("%H:%M"),
+                                login_time.strftime("%H:%M"), reason):
+                    st.success("Late login recorded successfully!")
+                    st.rerun()
+            else:
+                st.error("Please fill in all fields")
+    
+    # View late logins
+    st.subheader("View Late Logins")
+    late_logins = get_late_logins()
+    
+    if late_logins:
+        for login in late_logins:
+            with st.expander(f"{login[1]} - {login[5]}"):
+                st.write(f"**Agent:** {login[1]}")
+                st.write(f"**Presence Time:** {login[2]}")
+                st.write(f"**Login Time:** {login[3]}")
+                st.write(f"**Reason:** {login[4]}")
+                st.write(f"**Recorded:** {login[5]}")
+    else:
+        st.info("No late logins recorded")
+
+def display_quality_issues_page():
+    """Display the quality issues tracking page"""
+    if st.session_state.role != "admin":
+        st.error("Access denied")
+        return
+        
+    st.title("Quality Issues Tracking")
+    
+    # Add new quality issue
+    st.subheader("Record Quality Issue")
+    with st.form("new_quality_issue_form"):
+        agent_name = st.selectbox(
+            "Agent Name",
+            [user[1] for user in get_all_users() if user[2] == "agent"]
+        )
+        issue_type = st.selectbox(
+            "Issue Type",
+            ["Customer Service", "Technical Knowledge", "Communication",
+             "Process Adherence", "Other"]
+        )
+        timing = st.time_input("Time of Issue")
+        mobile_number = st.text_input("Customer Mobile Number")
+        product = st.text_input("Product/Service")
+        
+        if st.form_submit_button("Record Issue"):
+            if agent_name and issue_type and mobile_number and product:
+                if add_quality_issue(agent_name, issue_type, 
+                                   timing.strftime("%H:%M"),
+                                   mobile_number, product):
+                    st.success("Quality issue recorded successfully!")
+                    st.rerun()
+            else:
+                st.error("Please fill in all fields")
+    
+    # View quality issues
+    st.subheader("View Quality Issues")
+    quality_issues = get_quality_issues()
+    
+    if quality_issues:
+        for issue in quality_issues:
+            with st.expander(f"{issue[1]} - {issue[2]} - {issue[6]}"):
+                st.write(f"**Agent:** {issue[1]}")
+                st.write(f"**Issue Type:** {issue[2]}")
+                st.write(f"**Time:** {issue[3]}")
+                st.write(f"**Mobile Number:** {issue[4]}")
+                st.write(f"**Product:** {issue[5]}")
+                st.write(f"**Recorded:** {issue[6]}")
+    else:
+        st.info("No quality issues recorded")
+
+def display_midshift_issues_page():
+    """Display the midshift issues tracking page"""
+    if st.session_state.role != "admin":
+        st.error("Access denied")
+        return
+        
+    st.title("Midshift Issues Tracking")
+    
+    # Add new midshift issue
+    st.subheader("Record Midshift Issue")
+    with st.form("new_midshift_issue_form"):
+        agent_name = st.selectbox(
+            "Agent Name",
+            [user[1] for user in get_all_users() if user[2] == "agent"]
+        )
+        issue_type = st.selectbox(
+            "Issue Type",
+            ["System Down", "Application Error", "Network Issue",
+             "Hardware Problem", "Other"]
+        )
+        start_time = st.time_input("Start Time")
+        end_time = st.time_input("End Time")
+        
+        if st.form_submit_button("Record Issue"):
+            if agent_name and issue_type:
+                if add_midshift_issue(agent_name, issue_type,
+                                    start_time.strftime("%H:%M"),
+                                    end_time.strftime("%H:%M")):
+                    st.success("Midshift issue recorded successfully!")
+                    st.rerun()
+            else:
+                st.error("Please fill in all fields")
+    
+    # View midshift issues
+    st.subheader("View Midshift Issues")
+    midshift_issues = get_midshift_issues()
+    
+    if midshift_issues:
+        for issue in midshift_issues:
+            with st.expander(f"{issue[1]} - {issue[2]} - {issue[5]}"):
+                st.write(f"**Agent:** {issue[1]}")
+                st.write(f"**Issue Type:** {issue[2]}")
+                st.write(f"**Start Time:** {issue[3]}")
+                st.write(f"**End Time:** {issue[4]}")
+                st.write(f"**Recorded:** {issue[5]}")
+    else:
+        st.info("No midshift issues recorded")
+
+def display_system_settings_page():
+    """Display the system settings page"""
+    if st.session_state.role != "admin":
+        st.error("Access denied")
+        return
+        
+    st.title("System Settings")
+    
+    # System killswitch
+    st.subheader("System Access Control")
+    killswitch_enabled = is_killswitch_enabled()
+    if st.checkbox("Enable System Maintenance Mode", value=killswitch_enabled):
+        if not killswitch_enabled:
+            if toggle_killswitch(True):
+                st.success("System maintenance mode enabled")
+                st.rerun()
+    else:
+        if killswitch_enabled:
+            if toggle_killswitch(False):
+                st.success("System maintenance mode disabled")
+                st.rerun()
+    
+    # Chat killswitch
+    st.subheader("Chat System Control")
+    chat_killswitch_enabled = is_chat_killswitch_enabled()
+    if st.checkbox("Disable Chat System", value=chat_killswitch_enabled):
+        if not chat_killswitch_enabled:
+            if toggle_chat_killswitch(True):
+                st.success("Chat system disabled")
+                st.rerun()
+    else:
+        if chat_killswitch_enabled:
+            if toggle_chat_killswitch(False):
+                st.success("Chat system enabled")
+                st.rerun()
+    
+    # VIP user management
+    st.subheader("VIP User Management")
+    users = get_all_users()
+    
+    for user in users:
+        is_vip = is_vip_user(user[1])
+        if st.checkbox(f"VIP Status - {user[1]}", value=is_vip):
+            if not is_vip:
+                if set_vip_status(user[1], True):
+                    st.success(f"VIP status granted to {user[1]}")
+                    st.rerun()
         else:
-            st.info("No images in HOLD")
-
-    elif st.session_state.current_section == "fancy_number":
-        st.header("📱 Lycamobile Fancy Number Checker")
-        st.subheader("Official Policy: Analyzes last 6 digits only for qualifying patterns")
-
-        phone_input = st.text_input("Enter Phone Number", 
-                                  placeholder="e.g., 1555123456 or 44207123456")
-
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            if st.button("🔍 Check Number"):
-                if not phone_input:
-                    st.warning("Please enter a phone number")
-                else:
-                    is_fancy, pattern = is_fancy_number(phone_input)
-                    clean_number = re.sub(r'\D', '', phone_input)
-                    
-                    # Extract last 6 digits for display
-                    last_six = clean_number[-6:] if len(clean_number) >= 6 else clean_number
-                    formatted_num = f"{last_six[:3]}-{last_six[3:]}" if len(last_six) == 6 else last_six
-
-                    if is_fancy:
-                        st.markdown(f"""
-                        <div class="result-box fancy-result">
-                            <h3><span class="fancy-number">✨ {formatted_num} ✨</span></h3>
-                            <p>FANCY NUMBER DETECTED!</p>
-                            <p><strong>Pattern:</strong> {pattern}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class="result-box normal-result">
-                            <h3><span class="normal-number">{formatted_num}</span></h3>
-                            <p>Standard phone number</p>
-                            <p><strong>Reason:</strong> {pattern}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-        with col2:
-            st.markdown("""
-            ### Lycamobile Fancy Number Policy
-            **Qualifying Patterns (last 6 digits only):**
-            
-            #### 6-Digit Patterns
-            - 123456 (ascending)
-            - 987654 (descending)
-            - 666666 (repeating)
-            - 100001 (palindrome)
-            
-            #### 3-Digit Patterns  
-            - 444 555 (double triplets)
-            - 121 122 (similar triplets)
-            - 786 786 (repeating triplets)
-            - 457 456 (nearly sequential)
-            
-            #### 2-Digit Patterns
-            - 11 12 13 (incremental)
-            - 20 20 20 (repeating)
-            - 01 01 01 (alternating)
-            - 32 42 52 (stepping)
-            
-            #### Exceptional Cases
-            - Ending with 123/555/777/999
-            """)
-
-        # Test cases
-        debug_mode = st.checkbox("Show test cases", False)
-        if debug_mode:
-            test_numbers = [
-                ("16109055580", False),  # 055580 → No pattern ✗
-                ("123456", True),       # 6-digit ascending ✓
-                ("444555", True),       # Double triplets ✓
-                ("121122", True),       # Similar triplets ✓ 
-                ("111213", True),       # Incremental pairs ✓
-                ("202020", True),       # Repeating pairs ✓
-                ("010101", True),       # Alternating pairs ✓
-                ("324252", True),       # Stepping pairs ✓
-                ("7900000123", True),   # Ends with 123 ✓
-                ("123458", False),      # No pattern ✗
-                ("112233", False),      # Not in our strict rules ✗
-                ("555555", True)        # 6 identical digits ✓
-            ]
-            
-            st.markdown("### Strict Policy Validation")
-            for number, expected in test_numbers:
-                is_fancy, pattern = is_fancy_number(number)
-                result = "PASS" if is_fancy == expected else "FAIL"
-                color = "green" if result == "PASS" else "red"
-                st.write(f"<span style='color:{color}'>{number[-6:]}: {result} ({pattern})</span>", unsafe_allow_html=True)
-
-    elif st.session_state.current_section == "late_login":
-        st.subheader("⏰ Late Login Report")
-        
-        if not is_killswitch_enabled():
-            with st.form("late_login_form"):
-                cols = st.columns(3)
-                presence_time = cols[0].text_input("Time of presence (HH:MM)", placeholder="08:30")
-                login_time = cols[1].text_input("Time of log in (HH:MM)", placeholder="09:15")
-                reason = cols[2].selectbox("Reason", [
-                    "Workspace Issue",
-                    "Avaya Issue",
-                    "Aaad Tool",
-                    "Windows Issue",
-                    "Reset Password"
-                ])
-                
-                if st.form_submit_button("Submit"):
-                    # Validate time formats
-                    try:
-                        datetime.strptime(presence_time, "%H:%M")
-                        datetime.strptime(login_time, "%H:%M")
-                        add_late_login(
-                            st.session_state.username,
-                            presence_time,
-                            login_time,
-                            reason
-                        )
-                        st.success("Late login reported successfully!")
-                    except ValueError:
-                        st.error("Invalid time format. Please use HH:MM format (e.g., 08:30)")
-        
-        st.subheader("Late Login Records")
-        late_logins = get_late_logins()
-        
-        if st.session_state.role == "admin":
-            if late_logins:
-                # Prepare data for download
-                data = []
-                for login in late_logins:
-                    _, agent, presence, login_time, reason, ts = login
-                    data.append({
-                        "Agent's Name": agent,
-                        "Time of presence": presence,
-                        "Time of log in": login_time,
-                        "Reason": reason
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-                
-                # Download button
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download as CSV",
-                    data=csv,
-                    file_name="late_logins.csv",
-                    mime="text/csv"
-                )
-                
-                if st.button("Clear All Records"):
-                    clear_late_logins()
+            if is_vip and user[1].lower() != "taha kirri":
+                if set_vip_status(user[1], False):
+                    st.success(f"VIP status removed from {user[1]}")
                     st.rerun()
-            else:
-                st.info("No late login records found")
-        else:
-            # For agents, only show their own records
-            user_logins = [login for login in late_logins if login[1] == st.session_state.username]
-            if user_logins:
-                data = []
-                for login in user_logins:
-                    _, agent, presence, login_time, reason, ts = login
-                    data.append({
-                        "Agent's Name": agent,
-                        "Time of presence": presence,
-                        "Time of log in": login_time,
-                        "Reason": reason
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-            else:
-                st.info("You have no late login records")
-
-    elif st.session_state.current_section == "quality_issues":
-        st.subheader("📞 Quality Related Technical Issue")
-        
-        if not is_killswitch_enabled():
-            with st.form("quality_issue_form"):
-                cols = st.columns(4)
-                issue_type = cols[0].selectbox("Type of issue", [
-                    "Blocage Physical Avaya",
-                    "Hold Than Call Drop",
-                    "Call Drop From Workspace",
-                    "Wrong Space Frozen"
-                ])
-                timing = cols[1].text_input("Timing (HH:MM)", placeholder="14:30")
-                mobile_number = cols[2].text_input("Mobile number")
-                product = cols[3].selectbox("Product", [
-                    "LM_CS_LMUSA_EN",
-                    "LM_CS_LMUSA_ES"
-                ])
-                
-                if st.form_submit_button("Submit"):
-                    try:
-                        datetime.strptime(timing, "%H:%M")
-                        add_quality_issue(
-                            st.session_state.username,
-                            issue_type,
-                            timing,
-                            mobile_number,
-                            product
-                        )
-                        st.success("Quality issue reported successfully!")
-                    except ValueError:
-                        st.error("Invalid time format. Please use HH:MM format (e.g., 14:30)")
-        
-        st.subheader("Quality Issue Records")
-        quality_issues = get_quality_issues()
-        
-        if st.session_state.role == "admin":
-            if quality_issues:
-                # Prepare data for download
-                data = []
-                for issue in quality_issues:
-                    _, agent, issue_type, timing, mobile, product, ts = issue
-                    data.append({
-                        "Agent's Name": agent,
-                        "Type of issue": issue_type,
-                        "Timing": timing,
-                        "Mobile number": mobile,
-                        "Product": product
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-                
-                # Download button
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download as CSV",
-                    data=csv,
-                    file_name="quality_issues.csv",
-                    mime="text/csv"
-                )
-                
-                if st.button("Clear All Records"):
-                    clear_quality_issues()
-                    st.rerun()
-            else:
-                st.info("No quality issue records found")
-        else:
-            # For agents, only show their own records
-            user_issues = [issue for issue in quality_issues if issue[1] == st.session_state.username]
-            if user_issues:
-                data = []
-                for issue in user_issues:
-                    _, agent, issue_type, timing, mobile, product, ts = issue
-                    data.append({
-                        "Agent's Name": agent,
-                        "Type of issue": issue_type,
-                        "Timing": timing,
-                        "Mobile number": mobile,
-                        "Product": product
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-            else:
-                st.info("You have no quality issue records")
-
-    elif st.session_state.current_section == "midshift_issues":
-        st.subheader("🔄 Mid-shift Technical Issue")
-        
-        if not is_killswitch_enabled():
-            with st.form("midshift_issue_form"):
-                cols = st.columns(3)
-                issue_type = cols[0].selectbox("Issue Type", [
-                    "Default Not Ready",
-                    "Frozen Workspace",
-                    "Physical Avaya",
-                    "Pc Issue",
-                    "Aaad Tool",
-                    "Disconnected Avaya"
-                ])
-                start_time = cols[1].text_input("Start time (HH:MM)", placeholder="10:00")
-                end_time = cols[2].text_input("End time (HH:MM)", placeholder="10:30")
-                
-                if st.form_submit_button("Submit"):
-                    try:
-                        datetime.strptime(start_time, "%H:%M")
-                        datetime.strptime(end_time, "%H:%M")
-                        add_midshift_issue(
-                            st.session_state.username,
-                            issue_type,
-                            start_time,
-                            end_time
-                        )
-                        st.success("Mid-shift issue reported successfully!")
-                    except ValueError:
-                        st.error("Invalid time format. Please use HH:MM format (e.g., 10:00)")
-        
-        st.subheader("Mid-shift Issue Records")
-        midshift_issues = get_midshift_issues()
-        
-        if st.session_state.role == "admin":
-            if midshift_issues:
-                # Prepare data for download
-                data = []
-                for issue in midshift_issues:
-                    _, agent, issue_type, start_time, end_time, ts = issue
-                    data.append({
-                        "Agent's Name": agent,
-                        "Issue Type": issue_type,
-                        "Start time": start_time,
-                        "End Time": end_time
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-                
-                # Download button
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download as CSV",
-                    data=csv,
-                    file_name="midshift_issues.csv",
-                    mime="text/csv"
-                )
-                
-                if st.button("Clear All Records"):
-                    clear_midshift_issues()
-                    st.rerun()
-            else:
-                st.info("No mid-shift issue records found")
-        else:
-            # For agents, only show their own records
-            user_issues = [issue for issue in midshift_issues if issue[1] == st.session_state.username]
-            if user_issues:
-                data = []
-                for issue in user_issues:
-                    _, agent, issue_type, start_time, end_time, ts = issue
-                    data.append({
-                        "Agent's Name": agent,
-                        "Issue Type": issue_type,
-                        "Start time": start_time,
-                        "End Time": end_time
-                    })
-                
-                df = pd.DataFrame(data)
-                st.dataframe(df)
-            else:
-                st.info("You have no mid-shift issue records")
-
-    elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
-        if st.session_state.username.lower() == "taha kirri":
-            st.subheader("🚨 System Killswitch")
-            current = is_killswitch_enabled()
-            status = "🔴 ACTIVE" if current else "🟢 INACTIVE"
-            st.write(f"Current Status: {status}")
-            
-            col1, col2 = st.columns(2)
-            if current:
-                if col1.button("Deactivate Killswitch"):
-                    toggle_killswitch(False)
-                    st.rerun()
-            else:
-                if col1.button("Activate Killswitch"):
-                    toggle_killswitch(True)
-                    st.rerun()
-            
-            st.markdown("---")
-            
-            st.subheader("💬 Chat Killswitch")
-            current_chat = is_chat_killswitch_enabled()
-            chat_status = "🔴 ACTIVE" if current_chat else "🟢 INACTIVE"
-            st.write(f"Current Status: {chat_status}")
-            
-            col1, col2 = st.columns(2)
-            if current_chat:
-                if col1.button("Deactivate Chat Killswitch"):
-                    toggle_chat_killswitch(False)
-                    st.rerun()
-            else:
-                if col1.button("Activate Chat Killswitch"):
-                    toggle_chat_killswitch(True)
-                    st.rerun()
-            
-            st.markdown("---")
-        
-        st.subheader("🧹 Data Management")
-        
-        with st.expander("❌ Clear All Requests"):
-            with st.form("clear_requests_form"):
-                st.warning("This will permanently delete ALL requests and their comments!")
-                if st.form_submit_button("Clear All Requests"):
-                    if clear_all_requests():
-                        st.success("All requests deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Mistakes"):
-            with st.form("clear_mistakes_form"):
-                st.warning("This will permanently delete ALL mistakes!")
-                if st.form_submit_button("Clear All Mistakes"):
-                    if clear_all_mistakes():
-                        st.success("All mistakes deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Chat Messages"):
-            with st.form("clear_chat_form"):
-                st.warning("This will permanently delete ALL chat messages!")
-                if st.form_submit_button("Clear All Chat"):
-                    if clear_all_group_messages():
-                        st.success("All chat messages deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All HOLD Images"):
-            with st.form("clear_hold_form"):
-                st.warning("This will permanently delete ALL HOLD images!")
-                if st.form_submit_button("Clear All HOLD Images"):
-                    if clear_hold_images():
-                        st.success("All HOLD images deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Break Bookings"):
-            with st.form("clear_breaks_form"):
-                st.warning("This will permanently delete ALL break bookings!")
-                if st.form_submit_button("Clear All Break Bookings"):
-                    if clear_all_break_bookings():
-                        st.success("All break bookings deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Late Logins"):
-            with st.form("clear_late_logins_form"):
-                st.warning("This will permanently delete ALL late login records!")
-                if st.form_submit_button("Clear All Late Logins"):
-                    if clear_late_logins():
-                        st.success("All late login records deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Quality Issues"):
-            with st.form("clear_quality_issues_form"):
-                st.warning("This will permanently delete ALL quality issue records!")
-                if st.form_submit_button("Clear All Quality Issues"):
-                    if clear_quality_issues():
-                        st.success("All quality issue records deleted!")
-                        st.rerun()
-
-        with st.expander("❌ Clear All Mid-shift Issues"):
-            with st.form("clear_midshift_issues_form"):
-                st.warning("This will permanently delete ALL mid-shift issue records!")
-                if st.form_submit_button("Clear All Mid-shift Issues"):
-                    if clear_midshift_issues():
-                        st.success("All mid-shift issue records deleted!")
-                        st.rerun()
-
-        with st.expander("💣 Clear ALL Data"):
-            with st.form("nuclear_form"):
-                st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
-                if st.form_submit_button("🚨 Execute Full System Wipe"):
-                    try:
-                        clear_all_requests()
-                        clear_all_mistakes()
-                        clear_all_group_messages()
-                        clear_hold_images()
-                        clear_all_break_bookings()
-                        clear_late_logins()
-                        clear_quality_issues()
-                        clear_midshift_issues()
-                        st.success("All system data deleted!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error during deletion: {str(e)}")
-        
-        st.markdown("---")
-        st.subheader("User Management")
-        if not is_killswitch_enabled():
-            with st.form("add_user"):
-                user = st.text_input("Username")
-                pwd = st.text_input("Password", type="password")
-                role = st.selectbox("Role", ["agent", "admin"])
-                if st.form_submit_button("Add User"):
-                    if user and pwd:
-                        add_user(user, pwd, role)
-                        st.rerun()
-        
-        st.subheader("Existing Users")
-        users = get_all_users()
-        for uid, uname, urole in users:
-            cols = st.columns([3, 1, 1])
-            cols[0].write(uname)
-            cols[1].write(urole)
-            if cols[2].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
-                delete_user(uid)
+    
+    # Data management
+    st.subheader("Data Management")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("Clear All Requests"):
+            if clear_all_requests():
+                st.success("All requests cleared")
+                st.rerun()
+    
+    with col2:
+        if st.button("Clear All Mistakes"):
+            if clear_all_mistakes():
+                st.success("All mistakes cleared")
+                st.rerun()
+    
+    with col3:
+        if st.button("Clear All Messages"):
+            if clear_all_group_messages():
+                st.success("All messages cleared")
+                st.rerun()
+    
+    with col4:
+        if st.button("Clear All Images"):
+            if clear_hold_images():
+                st.success("All images cleared")
                 st.rerun()
 
 if __name__ == "__main__":
-    st.write("Request Management System")
+    main()
