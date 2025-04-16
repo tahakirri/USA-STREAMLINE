@@ -8,6 +8,8 @@ from PIL import Image
 import io
 import pandas as pd
 import json
+import sys
+import traceback
 
 # --------------------------
 # Database Functions
@@ -15,48 +17,177 @@ import json
 
 def get_db_connection():
     """Create and return a database connection."""
-    os.makedirs("data", exist_ok=True)
-    return sqlite3.connect("data/requests.db")
+    try:
+        # Ensure the data directory exists
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Create database connection with proper path handling
+        db_path = os.path.join(data_dir, "requests.db")
+        conn = sqlite3.connect(db_path)
+        
+        # Enable foreign key support
+        conn.execute("PRAGMA foreign_keys = ON")
+        
+        return conn
+    except Exception as e:
+        st.error(f"Database connection error: {str(e)}")
+        raise
 
 def hash_password(password):
+    """Hash a password using SHA-256."""
+    if not isinstance(password, str):
+        password = str(password)
     return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate(username, password):
+    """Authenticate a user and return their role."""
+    if not username or not password:
+        return None
+        
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute("SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
-                      (username, hashed_password))
+        cursor.execute(
+            "SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
+            (username.lower(), hashed_password)
+        )
         result = cursor.fetchone()
         return result[0] if result else None
+    except Exception as e:
+        st.error(f"Authentication error: {str(e)}")
+        return None
     finally:
         conn.close()
 
 def init_db():
-    conn = get_db_connection()
+    """Initialize the database with all necessary tables."""
+    conn = None
     try:
+        conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Create tables if they don't exist
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
+        # List of table creation statements
+        table_statements = [
+            # System settings table
+            """CREATE TABLE IF NOT EXISTS system_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                killswitch_enabled INTEGER DEFAULT 0,
+                chat_killswitch_enabled INTEGER DEFAULT 0
+            )""",
+            
+            # Users table
+            """CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin')),
                 is_vip INTEGER DEFAULT 0
-            )
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS vip_messages (
+            )""",
+            
+            # Requests table
+            """CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                request_type TEXT,
+                identifier TEXT,
+                comment TEXT,
+                timestamp TEXT,
+                completed INTEGER DEFAULT 0
+            )""",
+            
+            # Request comments table
+            """CREATE TABLE IF NOT EXISTS request_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER,
+                user TEXT,
+                comment TEXT,
+                timestamp TEXT,
+                FOREIGN KEY (request_id) REFERENCES requests (id)
+            )""",
+            
+            # Mistakes table
+            """CREATE TABLE IF NOT EXISTS mistakes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_leader TEXT,
+                agent_name TEXT,
+                ticket_id TEXT,
+                error_description TEXT,
+                timestamp TEXT
+            )""",
+            
+            # Group messages table
+            """CREATE TABLE IF NOT EXISTS group_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sender TEXT,
                 message TEXT,
                 timestamp TEXT,
                 mentions TEXT
-            )
+            )""",
+            
+            # VIP messages table
+            """CREATE TABLE IF NOT EXISTS vip_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )""",
+            
+            # Hold images table
+            """CREATE TABLE IF NOT EXISTS hold_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uploader TEXT,
+                image_data BLOB,
+                timestamp TEXT
+            )""",
+            
+            # Late logins table
+            """CREATE TABLE IF NOT EXISTS late_logins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                presence_time TEXT,
+                login_time TEXT,
+                reason TEXT,
+                timestamp TEXT
+            )""",
+            
+            # Quality issues table
+            """CREATE TABLE IF NOT EXISTS quality_issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                issue_type TEXT,
+                timing TEXT,
+                mobile_number TEXT,
+                product TEXT,
+                timestamp TEXT
+            )""",
+            
+            # Midshift issues table
+            """CREATE TABLE IF NOT EXISTS midshift_issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_name TEXT,
+                issue_type TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                timestamp TEXT
+            )"""
+        ]
+        
+        # Create all tables
+        for statement in table_statements:
+            try:
+                cursor.execute(statement)
+            except sqlite3.Error as e:
+                print(f"Error creating table: {str(e)}")
+                print(f"Statement: {statement}")
+                raise
+        
+        # Initialize system settings if not exists
+        cursor.execute("""
+            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) 
+            VALUES (1, 0, 0)
         """)
         
         # Create default admin account
@@ -75,10 +206,13 @@ def init_db():
         ]
         
         for username, password in admin_accounts:
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                VALUES (?, ?, ?, ?)
-            """, (username, hash_password(password), "admin", 0))
+            try:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                    VALUES (?, ?, ?, ?)
+                """, (username, hash_password(password), "admin", 0))
+            except sqlite3.Error as e:
+                print(f"Error creating admin account for {username}: {str(e)}")
         
         # Create agent accounts
         agents = [
@@ -130,10 +264,13 @@ def init_db():
         ]
         
         for agent_name, workspace_id in agents:
-            cursor.execute("""
-                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                VALUES (?, ?, ?, ?)
-            """, (agent_name, hash_password(workspace_id), "agent", 0))
+            try:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                    VALUES (?, ?, ?, ?)
+                """, (agent_name, hash_password(workspace_id), "agent", 0))
+            except sqlite3.Error as e:
+                print(f"Error creating agent account for {agent_name}: {str(e)}")
         
         # Ensure taha kirri has VIP status
         cursor.execute("""
@@ -141,8 +278,25 @@ def init_db():
         """)
         
         conn.commit()
+        print("Database initialized successfully")
+        
+    except Exception as e:
+        print(f"Database initialization error: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        raise
     finally:
-        conn.close()
+        if conn:
+            conn.close()
+
+# Initialize database when the module is loaded
+try:
+    init_db()
+except Exception as e:
+    st.error("Failed to initialize database. Please contact the administrator.")
+    print(f"Database initialization failed: {str(e)}")
 
 def is_killswitch_enabled():
     conn = get_db_connection()
