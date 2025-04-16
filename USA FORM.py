@@ -1719,16 +1719,17 @@ def inject_custom_css():
                 color: {c['text']};
             }}
             
-            /* Button Styling */
-            .stButton > button {{
-                background-color: {c['button_bg']} !important;
-                color: {c['button_text']} !important;
-                border: none !important;
-                border-radius: 0.5rem !important;
-                padding: 0.5rem 1rem !important;
-                font-weight: 500 !important;
-                transition: all 0.2s ease-in-out !important;
-            }}
+button_style = f"""
+<style>
+    .stButton > button {{
+        background-color: {c['button_bg']} !important;
+        color: {c['button_text']} !important;
+        border: none !important;
+        border-radius: 0.5rem !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease-in-out !important;
+    }}
             
             .stButton > button:hover {{
                 background-color: {c['button_hover']} !important;
