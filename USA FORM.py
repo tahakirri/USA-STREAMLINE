@@ -8,8 +8,6 @@ from PIL import Image
 import io
 import pandas as pd
 import json
-import sys
-import traceback
 
 # --------------------------
 # Database Functions
@@ -17,177 +15,48 @@ import traceback
 
 def get_db_connection():
     """Create and return a database connection."""
-    try:
-        # Ensure the data directory exists
-        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-        os.makedirs(data_dir, exist_ok=True)
-        
-        # Create database connection with proper path handling
-        db_path = os.path.join(data_dir, "requests.db")
-        conn = sqlite3.connect(db_path)
-        
-        # Enable foreign key support
-        conn.execute("PRAGMA foreign_keys = ON")
-        
-        return conn
-    except Exception as e:
-        st.error(f"Database connection error: {str(e)}")
-        raise
+    os.makedirs("data", exist_ok=True)
+    return sqlite3.connect("data/requests.db")
 
 def hash_password(password):
-    """Hash a password using SHA-256."""
-    if not isinstance(password, str):
-        password = str(password)
     return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate(username, password):
-    """Authenticate a user and return their role."""
-    if not username or not password:
-        return None
-        
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute(
-            "SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
-            (username.lower(), hashed_password)
-        )
+        cursor.execute("SELECT role FROM users WHERE LOWER(username) = LOWER(?) AND password = ?", 
+                      (username, hashed_password))
         result = cursor.fetchone()
         return result[0] if result else None
-    except Exception as e:
-        st.error(f"Authentication error: {str(e)}")
-        return None
     finally:
         conn.close()
 
 def init_db():
-    """Initialize the database with all necessary tables."""
-    conn = None
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
         cursor = conn.cursor()
         
-        # List of table creation statements
-        table_statements = [
-            # System settings table
-            """CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                killswitch_enabled INTEGER DEFAULT 0,
-                chat_killswitch_enabled INTEGER DEFAULT 0
-            )""",
-            
-            # Users table
-            """CREATE TABLE IF NOT EXISTS users (
+        # Create tables if they don't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin')),
                 is_vip INTEGER DEFAULT 0
-            )""",
-            
-            # Requests table
-            """CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                request_type TEXT,
-                identifier TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                completed INTEGER DEFAULT 0
-            )""",
-            
-            # Request comments table
-            """CREATE TABLE IF NOT EXISTS request_comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                request_id INTEGER,
-                user TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                FOREIGN KEY (request_id) REFERENCES requests (id)
-            )""",
-            
-            # Mistakes table
-            """CREATE TABLE IF NOT EXISTS mistakes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_leader TEXT,
-                agent_name TEXT,
-                ticket_id TEXT,
-                error_description TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Group messages table
-            """CREATE TABLE IF NOT EXISTS group_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT
-            )""",
-            
-            # VIP messages table
-            """CREATE TABLE IF NOT EXISTS vip_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT
-            )""",
-            
-            # Hold images table
-            """CREATE TABLE IF NOT EXISTS hold_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uploader TEXT,
-                image_data BLOB,
-                timestamp TEXT
-            )""",
-            
-            # Late logins table
-            """CREATE TABLE IF NOT EXISTS late_logins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                presence_time TEXT,
-                login_time TEXT,
-                reason TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Quality issues table
-            """CREATE TABLE IF NOT EXISTS quality_issues (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                issue_type TEXT,
-                timing TEXT,
-                mobile_number TEXT,
-                product TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Midshift issues table
-            """CREATE TABLE IF NOT EXISTS midshift_issues (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                issue_type TEXT,
-                start_time TEXT,
-                end_time TEXT,
-                timestamp TEXT
-            )"""
-        ]
+            )
+        """)
         
-        # Create all tables
-        for statement in table_statements:
-            try:
-                cursor.execute(statement)
-            except sqlite3.Error as e:
-                print(f"Error creating table: {str(e)}")
-                print(f"Statement: {statement}")
-                raise
-        
-        # Initialize system settings if not exists
         cursor.execute("""
-            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) 
-            VALUES (1, 0, 0)
+            CREATE TABLE IF NOT EXISTS vip_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )
         """)
         
         # Create default admin account
@@ -206,13 +75,10 @@ def init_db():
         ]
         
         for username, password in admin_accounts:
-            try:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                    VALUES (?, ?, ?, ?)
-                """, (username, hash_password(password), "admin", 0))
-            except sqlite3.Error as e:
-                print(f"Error creating admin account for {username}: {str(e)}")
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                VALUES (?, ?, ?, ?)
+            """, (username, hash_password(password), "admin", 0))
         
         # Create agent accounts
         agents = [
@@ -264,13 +130,10 @@ def init_db():
         ]
         
         for agent_name, workspace_id in agents:
-            try:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                    VALUES (?, ?, ?, ?)
-                """, (agent_name, hash_password(workspace_id), "agent", 0))
-            except sqlite3.Error as e:
-                print(f"Error creating agent account for {agent_name}: {str(e)}")
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                VALUES (?, ?, ?, ?)
+            """, (agent_name, hash_password(workspace_id), "agent", 0))
         
         # Ensure taha kirri has VIP status
         cursor.execute("""
@@ -278,25 +141,8 @@ def init_db():
         """)
         
         conn.commit()
-        print("Database initialized successfully")
-        
-    except Exception as e:
-        print(f"Database initialization error: {str(e)}")
-        print("Traceback:")
-        traceback.print_exc()
-        if conn:
-            conn.rollback()
-        raise
     finally:
-        if conn:
-            conn.close()
-
-# Initialize database when the module is loaded
-try:
-    init_db()
-except Exception as e:
-    st.error("Failed to initialize database. Please contact the administrator.")
-    print(f"Database initialization failed: {str(e)}")
+        conn.close()
 
 def is_killswitch_enabled():
     conn = get_db_connection()
@@ -1525,626 +1371,1327 @@ def set_vip_status(username, is_vip):
         conn.close()
 
 # --------------------------
-# Streamlit Configuration
+# Streamlit App
 # --------------------------
 
+# Add this at the beginning of the file, after the imports
+if 'color_mode' not in st.session_state:
+    st.session_state.color_mode = 'dark'
+
+def inject_custom_css():
+    # Add notification JavaScript
+    st.markdown("""
+    <script>
+    // Request notification permission on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        if (Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
+    });
+
+    // Function to show browser notification
+    function showNotification(title, body) {
+        if (Notification.permission === 'granted') {
+            const notification = new Notification(title, {
+                body: body,
+                icon: '🔔'
+            });
+            
+            notification.onclick = function() {
+                window.focus();
+                notification.close();
+            };
+        }
+    }
+
+    // Function to check for new messages
+    async function checkNewMessages() {
+        try {
+            const response = await fetch('/check_messages');
+            const data = await response.json();
+            
+            if (data.new_messages) {
+                data.messages.forEach(msg => {
+                    showNotification('New Message', `${msg.sender}: ${msg.message}`);
+                });
+            }
+        } catch (error) {
+            console.error('Error checking messages:', error);
+        }
+    }
+
+    // Check for new messages every 30 seconds
+    setInterval(checkNewMessages, 30000);
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Always use dark mode colors
+    c = {
+        'bg': '#0f172a',
+        'sidebar': '#1e293b',
+        'card': '#1e293b',
+        'text': '#e2e8f0',
+        'text_secondary': '#94a3b8',
+        'border': '#334155',
+        'accent': '#60a5fa',
+        'accent_hover': '#3b82f6',
+        'muted': '#94a3b8',
+        'input_bg': '#1e293b',
+        'input_text': '#e2e8f0',
+        'my_message_bg': '#2563eb',
+        'other_message_bg': '#334155',
+        'hover_bg': '#334155',
+        'notification_bg': '#1e293b',
+        'notification_text': '#e2e8f0',
+        'button_bg': '#2563eb',
+        'button_text': '#ffffff',
+        'button_hover': '#1d4ed8',
+        'dropdown_bg': '#1e293b',
+        'dropdown_text': '#e2e8f0',
+        'dropdown_hover': '#334155'
+    }
+    
+    st.markdown(f"""
+    <style>
+        /* Global Styles */
+        .stApp {{
+            background-color: {c['bg']};
+            color: {c['text']};
+        }}
+        
+        /* Button Styling */
+        .stButton > button {{
+            background-color: {c['button_bg']} !important;
+            color: {c['button_text']} !important;
+            border: none !important;
+            border-radius: 0.5rem !important;
+            padding: 0.5rem 1rem !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease-in-out !important;
+        }}
+        
+        .stButton > button:hover {{
+            background-color: {c['button_hover']} !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }}
+        
+        /* Form Submit Button */
+        .stForm [data-testid="stFormSubmitButton"] button {{
+            background-color: {c['button_bg']} !important;
+            color: {c['button_text']} !important;
+        }}
+        
+        /* Dropdown/Select Styling */
+        .stSelectbox > div > div {{
+            background-color: {c['dropdown_bg']} !important;
+            color: {c['dropdown_text']} !important;
+            border-color: {c['border']} !important;
+        }}
+        
+        .stSelectbox [data-baseweb="select"] {{
+            background-color: {c['dropdown_bg']} !important;
+        }}
+        
+        .stSelectbox [data-baseweb="select"] ul {{
+            background-color: {c['dropdown_bg']} !important;
+        }}
+        
+        .stSelectbox [data-baseweb="select"] li {{
+            background-color: {c['dropdown_bg']} !important;
+            color: {c['dropdown_text']} !important;
+        }}
+        
+        .stSelectbox [data-baseweb="select"] li:hover {{
+            background-color: {c['dropdown_hover']} !important;
+        }}
+        
+        /* Input Fields */
+        .stTextInput input, 
+        .stTextArea textarea {{
+            background-color: {c['input_bg']} !important;
+            color: {c['input_text']} !important;
+            border-color: {c['border']} !important;
+        }}
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {{
+            background-color: {c['sidebar']};
+            border-right: 1px solid {c['border']};
+        }}
+        
+        [data-testid="stSidebar"] .stButton > button {{
+            width: 100%;
+            text-align: left;
+            background-color: transparent;
+            color: {c['text']};
+            border: 1px solid transparent;
+        }}
+        
+        [data-testid="stSidebar"] .stButton > button:hover {{
+            background-color: {c['hover_bg']};
+            border-color: {c['accent']};
+        }}
+        
+        /* Cards */
+        .card {{
+            background-color: {c['card']};
+            border: 1px solid {c['border']};
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }}
+        
+        /* Chat Message Styling */
+        .chat-message {{
+            display: flex;
+            margin-bottom: 1rem;
+            max-width: 80%;
+            animation: fadeIn 0.3s ease-in-out;
+        }}
+        
+        .chat-message.received {{
+            margin-right: auto;
+        }}
+        
+        .chat-message.sent {{
+            margin-left: auto;
+            flex-direction: row-reverse;
+        }}
+        
+        .message-content {{
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            position: relative;
+        }}
+        
+        .received .message-content {{
+            background-color: {c['other_message_bg']};
+            color: {c['text']};
+            border-bottom-left-radius: 0.25rem;
+            margin-right: 1rem;
+        }}
+        
+        .sent .message-content {{
+            background-color: {c['my_message_bg']};
+            color: white;
+            border-bottom-right-radius: 0.25rem;
+            margin-left: 1rem;
+        }}
+        
+        .message-meta {{
+            font-size: 0.75rem;
+            color: {c['muted']};
+            margin-top: 0.25rem;
+        }}
+        
+        .message-avatar {{
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            background-color: {c['accent']};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+        }}
+        
+        /* Table Styling */
+        .stDataFrame {{
+            background-color: {c['card']} !important;
+        }}
+        
+        .stDataFrame td {{
+            color: {c['text']} !important;
+        }}
+        
+        .stDataFrame th {{
+            color: {c['text']} !important;
+            background-color: {c['dropdown_bg']} !important;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+
 st.set_page_config(
-    page_title="USA Team Management System",
-    page_icon="🌟",
+    page_title="Request Management System",
+    page_icon=":office:",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Session state initialization
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-if 'username' not in st.session_state:
-    st.session_state.username = None
-if 'role' not in st.session_state:
-    st.session_state.role = None
-if 'is_vip' not in st.session_state:
-    st.session_state.is_vip = False
+if "authenticated" not in st.session_state:
+    st.session_state.update({
+        "authenticated": False,
+        "role": None,
+        "username": None,
+        "current_section": "requests",
+        "last_request_count": 0,
+        "last_mistake_count": 0,
+        "last_message_ids": []
+    })
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .stButton button {
-        background-color: #1f77b4;
-        color: white;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
-        border: none;
-    }
-    .stButton button:hover {
-        background-color: #135c8d;
-    }
-    .success-message {
-        padding: 1rem;
-        background-color: #d4edda;
-        color: #155724;
-        border-radius: 5px;
-        margin: 1rem 0;
-    }
-    .error-message {
-        padding: 1rem;
-        background-color: #f8d7da;
-        color: #721c24;
-        border-radius: 5px;
-        margin: 1rem 0;
-    }
-    .sidebar .sidebar-content {
-        background-color: #f8f9fa;
-    }
-    </style>
+init_db()
+init_break_session_state()
+
+if not st.session_state.authenticated:
+    st.markdown("""
+        <div class="login-container">
+            <h1 style="text-align: center; margin-bottom: 2rem;">🏢 Request Management System</h1>
     """, unsafe_allow_html=True)
-
-def logout():
-    """Clear session state and log out user."""
-    st.session_state.authenticated = False
-    st.session_state.username = None
-    st.session_state.role = None
-    st.session_state.is_vip = False
-    st.experimental_rerun()
-
-def login_page():
-    """Display the login page."""
-    st.title("USA Team Management System")
     
-    col1, col2, col3 = st.columns([1,2,1])
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submit_col1, submit_col2, submit_col3 = st.columns([1, 2, 1])
+        with submit_col2:
+            if st.form_submit_button("Login", use_container_width=True):
+                if username and password:
+                    role = authenticate(username, password)
+                    if role:
+                        st.session_state.update({
+                            "authenticated": True,
+                            "role": role,
+                            "username": username,
+                            "last_request_count": len(get_requests()),
+                            "last_mistake_count": len(get_mistakes()),
+                            "last_message_ids": [msg[0] for msg in get_group_messages()]
+                        })
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
     
-    with col2:
+    st.markdown("</div>", unsafe_allow_html=True)
+
+else:
+    if is_killswitch_enabled():
         st.markdown("""
-            <div style='text-align: center; padding: 2rem;'>
-                <h2>Welcome! Please log in</h2>
-            </div>
+        <div class="killswitch-active">
+            <h3>⚠️ SYSTEM LOCKED ⚠️</h3>
+            <p>The system is currently in read-only mode.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    elif is_chat_killswitch_enabled():
+        st.markdown("""
+        <div class="chat-killswitch-active">
+            <h3>⚠️ CHAT LOCKED ⚠️</h3>
+            <p>The chat functionality is currently disabled.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    def show_notifications():
+        current_requests = get_requests()
+        current_mistakes = get_mistakes()
+        current_messages = get_group_messages()
+        
+        new_requests = len(current_requests) - st.session_state.last_request_count
+        if new_requests > 0 and st.session_state.last_request_count > 0:
+            st.toast(f"📋 {new_requests} new request(s) submitted!")
+        st.session_state.last_request_count = len(current_requests)
+        
+        new_mistakes = len(current_mistakes) - st.session_state.last_mistake_count
+        if new_mistakes > 0 and st.session_state.last_mistake_count > 0:
+            st.toast(f"❌ {new_mistakes} new mistake(s) reported!")
+        st.session_state.last_mistake_count = len(current_mistakes)
+        
+        current_message_ids = [msg[0] for msg in current_messages]
+        new_messages = [msg for msg in current_messages if msg[0] not in st.session_state.last_message_ids]
+        for msg in new_messages:
+            if msg[1] != st.session_state.username:
+                mentions = msg[4].split(',') if msg[4] else []
+                if st.session_state.username in mentions:
+                    st.toast(f"💬 You were mentioned by {msg[1]}!")
+                else:
+                    st.toast(f"💬 New message from {msg[1]}!")
+        st.session_state.last_message_ids = current_message_ids
+
+    show_notifications()
+
+    with st.sidebar:
+        st.title(f"👋 Welcome, {st.session_state.username}")
+        st.markdown("---")
+        
+        nav_options = [
+            ("📋 Requests", "requests"),
+            ("☕ Breaks", "breaks"),
+            ("🖼️ HOLD", "hold"),
+            ("❌ Mistakes", "mistakes"),
+            ("💬 Chat", "chat"),
+            ("📱 Fancy Number", "fancy_number"),
+            ("⏰ Late Login", "late_login"),
+            ("📞 Quality Issues", "quality_issues"),
+            ("🔄 Mid-shift Issues", "midshift_issues")
+        ]
+        
+        # Add admin option for admin users
+        if st.session_state.role == "admin":
+            nav_options.append(("⚙️ Admin", "admin"))
+        
+        # Add VIP Management for taha kirri
+        if st.session_state.username.lower() == "taha kirri":
+            nav_options.append(("⭐ VIP Management", "vip_management"))
+        
+        for option, value in nav_options:
+            if st.button(option, key=f"nav_{value}", use_container_width=True):
+                st.session_state.current_section = value
+        
+        st.markdown("---")
+        pending_requests = len([r for r in get_requests() if not r[6]])
+        new_mistakes = len(get_mistakes())
+        unread_messages = len([m for m in get_group_messages() 
+                             if m[0] not in st.session_state.last_message_ids 
+                             and m[1] != st.session_state.username])
+        
+        st.markdown(f"""
+        <div style="
+            background-color: {'#1e293b' if st.session_state.color_mode == 'dark' else '#ffffff'};
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid {'#334155' if st.session_state.color_mode == 'dark' else '#e2e8f0'};
+            margin-bottom: 20px;
+        ">
+            <h4 style="
+                color: {'#e2e8f0' if st.session_state.color_mode == 'dark' else '#1e293b'};
+                margin-bottom: 1rem;
+            ">🔔 Notifications</h4>
+            <p style="
+                color: {'#94a3b8' if st.session_state.color_mode == 'dark' else '#475569'};
+                margin-bottom: 0.5rem;
+            ">📋 Pending requests: {pending_requests}</p>
+            <p style="
+                color: {'#94a3b8' if st.session_state.color_mode == 'dark' else '#475569'};
+                margin-bottom: 0.5rem;
+            ">❌ Recent mistakes: {new_mistakes}</p>
+            <p style="
+                color: {'#94a3b8' if st.session_state.color_mode == 'dark' else '#475569'};
+            ">💬 Unread messages: {unread_messages}</p>
+        </div>
         """, unsafe_allow_html=True)
         
-        username = st.text_input("Username", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.rerun()
+
+    st.title(st.session_state.current_section.title())
+
+    if st.session_state.current_section == "requests":
+        if not is_killswitch_enabled():
+            with st.expander("➕ Submit New Request"):
+                with st.form("request_form"):
+                    cols = st.columns([1, 3])
+                    request_type = cols[0].selectbox("Type", ["Email", "Phone", "Ticket"])
+                    identifier = cols[1].text_input("Identifier")
+                    comment = st.text_area("Comment")
+                    if st.form_submit_button("Submit"):
+                        if identifier and comment:
+                            if add_request(st.session_state.username, request_type, identifier, comment):
+                                st.success("Request submitted successfully!")
+                                st.rerun()
         
-        if st.button("Login", key="login_button"):
-            if username and password:
-                role = authenticate(username, password)
-                if role:
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.session_state.role = role
-                    
-                    # Check if user is VIP
-                    conn = get_db_connection()
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT is_vip FROM users WHERE username = ?", (username,))
-                        result = cursor.fetchone()
-                        st.session_state.is_vip = bool(result[0]) if result else False
-                    finally:
-                        conn.close()
-                    
-                    st.success("Login successful!")
-                    st.experimental_rerun()
-                else:
-                    st.error("Invalid username or password")
-            else:
-                st.warning("Please enter both username and password")
-
-def check_killswitch():
-    """Check if the system killswitch is enabled."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT killswitch_enabled FROM system_settings WHERE id = 1")
-        result = cursor.fetchone()
-        return bool(result[0]) if result else False
-    finally:
-        conn.close()
-
-def check_chat_killswitch():
-    """Check if the chat killswitch is enabled."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT chat_killswitch_enabled FROM system_settings WHERE id = 1")
-        result = cursor.fetchone()
-        return bool(result[0]) if result else False
-    finally:
-        conn.close()
-
-# Main application flow
-if not st.session_state.authenticated:
-    login_page()
-else:
-    # Check killswitch before proceeding
-    if check_killswitch() and st.session_state.role != 'admin':
-        st.error("The system is currently under maintenance. Please try again later.")
-        if st.button("Logout"):
-            logout()
-    else:
-        # Continue with the main application
-        st.sidebar.title(f"Welcome, {st.session_state.username}")
-        st.sidebar.text(f"Role: {st.session_state.role.capitalize()}")
-        
-        if st.sidebar.button("Logout"):
-            logout()
-
-# --------------------------
-# Streamlit App
-# --------------------------
-
-def main():
-    """Main application entry point"""
-    try:
-        # Initialize session state for navigation
-        if "page" not in st.session_state:
-            st.session_state.page = "requests"
-        
-        # Initialize database
-        init_db()
-        
-        # Main application logic after authentication
-        if st.session_state.authenticated:
-            # Sidebar navigation
-            st.sidebar.title("Navigation")
+            st.subheader("🔍 Search Requests")
+            search_query = st.text_input("Search requests...")
+            requests = search_requests(search_query) if search_query else get_requests()
             
-            # Admin-specific options
+            st.subheader("All Requests")
+            for req in requests:
+                req_id, agent, req_type, identifier, comment, timestamp, completed = req
+                with st.container():
+                    cols = st.columns([0.1, 0.9])
+                    with cols[0]:
+                        st.checkbox("Done", value=bool(completed), 
+                                   key=f"check_{req_id}", 
+                                   on_change=update_request_status,
+                                   args=(req_id, not completed))
+                    with cols[1]:
+                        st.markdown(f"""
+                        <div class="card">
+                            <div style="display: flex; justify-content: space-between;">
+                                <h4>#{req_id} - {req_type}</h4>
+                                <small>{timestamp}</small>
+                            </div>
+                            <p>Agent: {agent}</p>
+                            <p>Identifier: {identifier}</p>
+                            <div style="margin-top: 1rem;">
+                                <h5>Status Updates:</h5>
+                        """, unsafe_allow_html=True)
+                        
+                        comments = get_request_comments(req_id)
+                        for comment in comments:
+                            cmt_id, _, user, cmt_text, cmt_time = comment
+                            st.markdown(f"""
+                                <div class="comment-box">
+                                    <div class="comment-user">
+                                        <small><strong>{user}</strong></small>
+                                        <small>{cmt_time}</small>
+                                    </div>
+                                    <div class="comment-text">{cmt_text}</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        
+                        if st.session_state.role == "admin":
+                            with st.form(key=f"comment_form_{req_id}"):
+                                new_comment = st.text_input("Add status update/comment")
+                                if st.form_submit_button("Add Comment"):
+                                    if new_comment:
+                                        add_request_comment(req_id, st.session_state.username, new_comment)
+                                        st.rerun()
+        else:
+            st.error("System is currently locked. Access to requests is disabled.")
+
+    elif st.session_state.current_section == "mistakes":
+        if not is_killswitch_enabled():
+            # Only show mistake reporting form to admin users
             if st.session_state.role == "admin":
-                page = st.sidebar.radio(
-                    "Select Section",
-                    ["Requests", "Mistakes", "Chat", "VIP Chat", "Break Schedule", 
-                     "Late Logins", "Quality Issues", "Midshift Issues", "System Settings"]
-                )
+                with st.expander("➕ Report New Mistake"):
+                    with st.form("mistake_form"):
+                        cols = st.columns(3)
+                        agent_name = cols[0].text_input("Agent Name")
+                        ticket_id = cols[1].text_input("Ticket ID")
+                        error_description = st.text_area("Error Description")
+                        if st.form_submit_button("Submit"):
+                            if agent_name and ticket_id and error_description:
+                                add_mistake(st.session_state.username, agent_name, ticket_id, error_description)
+                                st.success("Mistake reported successfully!")
+                                st.rerun()
+        
+            st.subheader("🔍 Search Mistakes")
+            search_query = st.text_input("Search mistakes...")
+            mistakes = search_mistakes(search_query) if search_query else get_mistakes()
+            
+            st.subheader("Mistakes Log")
+            for mistake in mistakes:
+                m_id, tl, agent, ticket, error, ts = mistake
+                st.markdown(f"""
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between;">
+                        <h4>#{m_id}</h4>
+                        <small>{ts}</small>
+                    </div>
+                    <p>Agent: {agent}</p>
+                    <p>Ticket: {ticket}</p>
+                    <p>Error: {error}</p>
+                    <p><small>Reported by: {tl}</small></p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.error("System is currently locked. Access to mistakes is disabled.")
+
+    elif st.session_state.current_section == "chat":
+        if not is_killswitch_enabled():
+            # Add notification permission request
+            st.markdown("""
+            <div id="notification-container"></div>
+            <script>
+            // Check if notifications are supported
+            if ('Notification' in window) {
+                const container = document.getElementById('notification-container');
+                if (Notification.permission === 'default') {
+                    container.innerHTML = `
+                        <div style="padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; background-color: #1e293b; border: 1px solid #334155;">
+                            <p style="margin: 0; color: #e2e8f0;">Would you like to receive notifications for new messages?</p>
+                            <button onclick="requestNotificationPermission()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background-color: #2563eb; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                                Enable Notifications
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
+            async function requestNotificationPermission() {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    document.getElementById('notification-container').style.display = 'none';
+                }
+            }
+            </script>
+            """, unsafe_allow_html=True)
+            
+            if is_chat_killswitch_enabled():
+                st.warning("Chat functionality is currently disabled by the administrator.")
             else:
-                page = st.sidebar.radio(
-                    "Select Section",
-                    ["Requests", "Chat", "Break Schedule"] + 
-                    (["VIP Chat"] if st.session_state.is_vip else [])
-                )
-            
-            st.session_state.page = page.lower()
-            
-            # Display selected page content
-            if st.session_state.page == "requests":
-                display_requests_page()
-            elif st.session_state.page == "mistakes":
-                display_mistakes_page()
-            elif st.session_state.page == "chat":
-                display_chat_page()
-            elif st.session_state.page == "vip chat":
-                display_vip_chat_page()
-            elif st.session_state.page == "break schedule":
-                if st.session_state.role == "admin":
-                    admin_break_dashboard()
+                # Check if user is VIP or taha kirri
+                is_vip = is_vip_user(st.session_state.username)
+                is_taha = st.session_state.username.lower() == "taha kirri"
+                
+                if is_vip or is_taha:
+                    tab1, tab2 = st.tabs(["💬 Regular Chat", "⭐ VIP Chat"])
+                    
+                    with tab1:
+                        st.subheader("Regular Chat")
+                        messages = get_group_messages()
+                        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+                        for msg in reversed(messages):
+                            msg_id, sender, message, ts, mentions = msg
+                            is_sent = sender == st.session_state.username
+                            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                            
+                            st.markdown(f"""
+                            <div class="chat-message {'sent' if is_sent else 'received'}">
+                                <div class="message-avatar">
+                                    {sender[0].upper()}
+                                </div>
+                                <div class="message-content">
+                                    <div>{message}</div>
+                                    <div class="message-meta">{sender} • {ts}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        with st.form("regular_chat_form", clear_on_submit=True):
+                            message = st.text_input("Type your message...", key="regular_chat_input")
+                            col1, col2 = st.columns([5,1])
+                            with col2:
+                                if st.form_submit_button("Send"):
+                                    if message:
+                                        send_group_message(st.session_state.username, message)
+                                        st.rerun()
+                    
+                    with tab2:
+                        st.markdown("""
+                        <div style='padding: 1rem; background-color: #2d3748; border-radius: 0.5rem; margin-bottom: 1rem;'>
+                            <h3 style='color: gold; margin: 0;'>⭐ VIP Chat</h3>
+                            <p style='color: #e2e8f0; margin: 0;'>Exclusive chat for VIP members</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        vip_messages = get_vip_messages()
+                        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+                        for msg in reversed(vip_messages):
+                            msg_id, sender, message, ts, mentions = msg
+                            is_sent = sender == st.session_state.username
+                            is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                            
+                            st.markdown(f"""
+                            <div class="chat-message {'sent' if is_sent else 'received'}">
+                                <div class="message-avatar" style="background-color: gold;">
+                                    {sender[0].upper()}
+                                </div>
+                                <div class="message-content" style="background-color: #4a5568;">
+                                    <div>{message}</div>
+                                    <div class="message-meta">{sender} • {ts}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        with st.form("vip_chat_form", clear_on_submit=True):
+                            message = st.text_input("Type your message...", key="vip_chat_input")
+                            col1, col2 = st.columns([5,1])
+                            with col2:
+                                if st.form_submit_button("Send"):
+                                    if message:
+                                        send_vip_message(st.session_state.username, message)
+                                        st.rerun()
                 else:
-                    agent_break_dashboard()
-            elif st.session_state.page == "late logins":
-                display_late_logins_page()
-            elif st.session_state.page == "quality issues":
-                display_quality_issues_page()
-            elif st.session_state.page == "midshift issues":
-                display_midshift_issues_page()
-            elif st.session_state.page == "system settings":
-                display_system_settings_page()
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        print(f"Error details: {str(e)}")
-        traceback.print_exc()
+                    # Regular chat only for non-VIP users
+                    st.subheader("Regular Chat")
+                    messages = get_group_messages()
+                    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+                    for msg in reversed(messages):
+                        msg_id, sender, message, ts, mentions = msg
+                        is_sent = sender == st.session_state.username
+                        is_mentioned = st.session_state.username in (mentions.split(',') if mentions else [])
+                        
+                        st.markdown(f"""
+                        <div class="chat-message {'sent' if is_sent else 'received'}">
+                            <div class="message-avatar">
+                                {sender[0].upper()}
+                            </div>
+                            <div class="message-content">
+                                <div>{message}</div>
+                                <div class="message-meta">{sender} • {ts}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    with st.form("chat_form", clear_on_submit=True):
+                        message = st.text_input("Type your message...", key="chat_input")
+                        col1, col2 = st.columns([5,1])
+                        with col2:
+                            if st.form_submit_button("Send"):
+                                if message:
+                                    send_group_message(st.session_state.username, message)
+                                    st.rerun()
+        else:
+            st.error("System is currently locked. Access to chat is disabled.")
 
-def display_requests_page():
-    """Display the requests management page"""
-    st.title("Request Management")
-    
-    # Add new request section
-    st.subheader("Submit New Request")
-    with st.form("new_request_form"):
-        request_type = st.selectbox(
-            "Request Type",
-            ["Technical Issue", "System Access", "Software Installation", 
-             "Hardware Problem", "Other"]
-        )
-        identifier = st.text_input("Ticket/Reference ID")
-        comment = st.text_area("Description")
-        
-        if st.form_submit_button("Submit Request"):
-            if identifier and comment:
-                if add_request(st.session_state.username, request_type, identifier, comment):
-                    st.success("Request submitted successfully!")
-                    st.rerun()
-            else:
-                st.error("Please fill in all fields")
-    
-    # View requests section
-    st.subheader("View Requests")
-    search_query = st.text_input("Search requests...", key="request_search")
-    
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        show_completed = st.checkbox("Show Completed", value=False)
-    
-    requests = search_requests(search_query) if search_query else get_requests()
-    
-    if requests:
-        for req in requests:
-            if not show_completed and req[5]:  # Skip completed requests if not showing
-                continue
+    elif st.session_state.current_section == "fancy_number":
+        if not is_killswitch_enabled():
+            st.title("📱 Fancy Number Checker")
+            
+            with st.form("fancy_number_form"):
+                phone_number = st.text_input("Enter Phone Number", placeholder="Enter a 10-digit phone number")
+                submit = st.form_submit_button("Check Number")
                 
-            with st.expander(
-                f"{req[2]} - {req[3]} ({req[1]}) - {'✅' if req[5] else '🔄'}"
-            ):
-                st.write(f"**Type:** {req[2]}")
-                st.write(f"**Agent:** {req[1]}")
-                st.write(f"**ID:** {req[3]}")
-                st.write(f"**Description:** {req[4]}")
-                st.write(f"**Submitted:** {req[5]}")
-                
-                # Comments section
-                st.subheader("Comments")
-                comments = get_request_comments(req[0])
-                for comment in comments:
-                    st.text(f"{comment[2]} ({comment[4]}): {comment[3]}")
-                
-                # Add comment form
-                new_comment = st.text_input("Add comment", key=f"comment_{req[0]}")
-                if st.button("Add Comment", key=f"add_comment_{req[0]}"):
-                    if new_comment:
-                        if add_request_comment(req[0], st.session_state.username, new_comment):
-                            st.success("Comment added!")
+                if submit and phone_number:
+                    # Clean the phone number
+                    cleaned_number = ''.join(filter(str.isdigit, phone_number))
+                    
+                    if len(cleaned_number) != 10:
+                        st.error("Please enter a valid 10-digit phone number")
+                    else:
+                        # Check for patterns
+                        patterns = []
+                        
+                        # Check for repeating digits
+                        for i in range(10):
+                            if str(i) * 3 in cleaned_number:
+                                patterns.append(f"Contains triple {i}'s")
+                            if str(i) * 4 in cleaned_number:
+                                patterns.append(f"Contains quadruple {i}'s")
+                        
+                        # Check for sequential numbers (ascending and descending)
+                        for i in range(len(cleaned_number)-2):
+                            if (int(cleaned_number[i]) + 1 == int(cleaned_number[i+1]) and 
+                                int(cleaned_number[i+1]) + 1 == int(cleaned_number[i+2])):
+                                patterns.append("Contains ascending sequence")
+                            elif (int(cleaned_number[i]) - 1 == int(cleaned_number[i+1]) and 
+                                  int(cleaned_number[i+1]) - 1 == int(cleaned_number[i+2])):
+                                patterns.append("Contains descending sequence")
+                        
+                        # Check for palindrome patterns
+                        for i in range(len(cleaned_number)-3):
+                            segment = cleaned_number[i:i+4]
+                            if segment == segment[::-1]:
+                                patterns.append(f"Contains palindrome pattern: {segment}")
+                        
+                        # Check for repeated pairs
+                        for i in range(len(cleaned_number)-1):
+                            pair = cleaned_number[i:i+2]
+                            if cleaned_number.count(pair) > 1:
+                                patterns.append(f"Contains repeated pair: {pair}")
+                        
+                        # Format number in a readable way
+                        formatted_number = f"({cleaned_number[:3]}) {cleaned_number[3:6]}-{cleaned_number[6:]}"
+                        
+                        # Display results
+                        st.write("### Analysis Results")
+                        st.write(f"Formatted Number: {formatted_number}")
+                        
+                        if patterns:
+                            st.success("This is a fancy number! 🌟")
+                            st.write("Special patterns found:")
+                            for pattern in set(patterns):  # Using set to remove duplicates
+                                st.write(f"- {pattern}")
+                        else:
+                            st.info("This appears to be a regular number. No special patterns found.")
+        else:
+            st.error("System is currently locked. Access to fancy number checker is disabled.")
+
+    elif st.session_state.current_section == "hold":
+        if not is_killswitch_enabled():
+            st.subheader("🖼️ HOLD Images")
+            
+            # Only show upload option to admin users
+            if st.session_state.role == "admin":
+                uploaded_file = st.file_uploader("Upload HOLD Image", type=['png', 'jpg', 'jpeg'])
+                if uploaded_file is not None:
+                    try:
+                        # Convert the file to bytes
+                        img_bytes = uploaded_file.getvalue()
+                        
+                        # Clear existing images before adding new one
+                        clear_hold_images()
+                        
+                        # Add to database
+                        if add_hold_image(st.session_state.username, img_bytes):
+                            st.success("Image uploaded successfully!")
                             st.rerun()
+                    except Exception as e:
+                        st.error(f"Error uploading image: {str(e)}")
+            
+            # Display images (visible to all users)
+            images = get_hold_images()
+            if images:
+                # Get only the most recent image
+                img = images[0]  # Since images are ordered by timestamp DESC
+                img_id, uploader, img_data, timestamp = img
+                st.markdown(f"""
+                <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
+                    <p><strong>Uploaded by:</strong> {uploader}</p>
+                    <p><small>Uploaded at: {timestamp}</small></p>
+                </div>
+                """, unsafe_allow_html=True)
+                try:
+                    image = Image.open(io.BytesIO(img_data))
+                    st.image(image, use_container_width=True)  # Updated parameter
+                except Exception as e:
+                    st.error(f"Error displaying image: {str(e)}")
+            else:
+                st.info("No HOLD images available")
+        else:
+            st.error("System is currently locked. Access to HOLD images is disabled.")
+
+    elif st.session_state.current_section == "late_login":
+        st.subheader("⏰ Late Login Report")
+        
+        if not is_killswitch_enabled():
+            with st.form("late_login_form"):
+                cols = st.columns(3)
+                presence_time = cols[0].text_input("Time of presence (HH:MM)", placeholder="08:30")
+                login_time = cols[1].text_input("Time of log in (HH:MM)", placeholder="09:15")
+                reason = cols[2].selectbox("Reason", [
+                    "Workspace Issue",
+                    "Avaya Issue",
+                    "Aaad Tool",
+                    "Windows Issue",
+                    "Reset Password"
+                ])
                 
-                # Toggle completion status (admin only)
-                if st.session_state.role == "admin":
-                    if st.button(
-                        "Mark as Complete" if not req[5] else "Reopen",
-                        key=f"toggle_{req[0]}"
-                    ):
-                        if update_request_status(req[0], not req[5]):
-                            st.success(
-                                "Request marked as complete!" if not req[5] 
-                                else "Request reopened!"
-                            )
-                            st.rerun()
-    else:
-        st.info("No requests found")
-
-def display_mistakes_page():
-    """Display the mistakes tracking page"""
-    if st.session_state.role != "admin":
-        st.error("Access denied")
-        return
+                if st.form_submit_button("Submit"):
+                    try:
+                        datetime.strptime(presence_time, "%H:%M")
+                        datetime.strptime(login_time, "%H:%M")
+                        add_late_login(
+                            st.session_state.username,
+                            presence_time,
+                            login_time,
+                            reason
+                        )
+                        st.success("Late login reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 08:30)")
         
-    st.title("Mistake Tracking")
-    
-    # Add new mistake section
-    st.subheader("Record New Mistake")
-    with st.form("new_mistake_form"):
-        agent_name = st.selectbox(
-            "Agent Name",
-            [user[1] for user in get_all_users() if user[2] == "agent"]
-        )
-        ticket_id = st.text_input("Ticket ID")
-        error_description = st.text_area("Error Description")
+        st.subheader("Late Login Records")
+        late_logins = get_late_logins()
         
-        if st.form_submit_button("Record Mistake"):
-            if agent_name and ticket_id and error_description:
-                if add_mistake(st.session_state.username, agent_name, ticket_id, 
-                             error_description):
-                    st.success("Mistake recorded successfully!")
+        if st.session_state.role == "admin":
+            if late_logins:
+                data = []
+                for login in late_logins:
+                    _, agent, presence, login_time, reason, ts = login
+                    data.append({
+                        "Agent's Name": agent,
+                        "Time of presence": presence,
+                        "Time of log in": login_time,
+                        "Reason": reason
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="late_logins.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_late_logins()
                     st.rerun()
             else:
-                st.error("Please fill in all fields")
-    
-    # View mistakes section
-    st.subheader("View Mistakes")
-    search_query = st.text_input("Search mistakes...", key="mistake_search")
-    
-    mistakes = search_mistakes(search_query) if search_query else get_mistakes()
-    
-    if mistakes:
-        for mistake in mistakes:
-            with st.expander(f"{mistake[2]} - {mistake[3]}"):
-                st.write(f"**Team Leader:** {mistake[1]}")
-                st.write(f"**Agent:** {mistake[2]}")
-                st.write(f"**Ticket ID:** {mistake[3]}")
-                st.write(f"**Description:** {mistake[4]}")
-                st.write(f"**Recorded:** {mistake[5]}")
-    else:
-        st.info("No mistakes found")
+                st.info("No late login records found")
+        else:
+            user_logins = [login for login in late_logins if login[1] == st.session_state.username]
+            if user_logins:
+                data = []
+                for login in user_logins:
+                    _, agent, presence, login_time, reason, ts = login
+                    data.append({
+                        "Agent's Name": agent,
+                        "Time of presence": presence,
+                        "Time of log in": login_time,
+                        "Reason": reason
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no late login records")
 
-def display_chat_page():
-    """Display the group chat page"""
-    st.title("Group Chat")
-    
-    if check_chat_killswitch():
-        st.error("Chat is currently disabled")
-        return
-    
-    # Message input
-    with st.form("new_message_form"):
-        message = st.text_area("Type your message")
-        if st.form_submit_button("Send"):
-            if message:
-                if send_group_message(st.session_state.username, message):
-                    st.success("Message sent!")
+    elif st.session_state.current_section == "quality_issues":
+        st.subheader("📞 Quality Related Technical Issue")
+        
+        if not is_killswitch_enabled():
+            with st.form("quality_issue_form"):
+                cols = st.columns(4)
+                issue_type = cols[0].selectbox("Type of issue", [
+                    "Blocage Physical Avaya",
+                    "Hold Than Call Drop",
+                    "Call Drop From Workspace",
+                    "Wrong Space Frozen"
+                ])
+                timing = cols[1].text_input("Timing (HH:MM)", placeholder="14:30")
+                mobile_number = cols[2].text_input("Mobile number")
+                product = cols[3].selectbox("Product", [
+                    "LM_CS_LMUSA_EN",
+                    "LM_CS_LMUSA_ES"
+                ])
+                
+                if st.form_submit_button("Submit"):
+                    try:
+                        datetime.strptime(timing, "%H:%M")
+                        add_quality_issue(
+                            st.session_state.username,
+                            issue_type,
+                            timing,
+                            mobile_number,
+                            product
+                        )
+                        st.success("Quality issue reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 14:30)")
+        
+        st.subheader("Quality Issue Records")
+        quality_issues = get_quality_issues()
+        
+        if st.session_state.role == "admin":
+            if quality_issues:
+                data = []
+                for issue in quality_issues:
+                    _, agent, issue_type, timing, mobile, product, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Type of issue": issue_type,
+                        "Timing": timing,
+                        "Mobile number": mobile,
+                        "Product": product
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="quality_issues.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_quality_issues()
                     st.rerun()
             else:
-                st.error("Please enter a message")
-    
-    # Display messages
-    st.subheader("Messages")
-    messages = get_group_messages()
-    
-    if messages:
-        for msg in messages:
-            with st.container():
-                st.markdown(f"""
-                    <div style='padding: 10px; border-radius: 5px; margin: 5px 0;
-                         background-color: {"#1e293b" if msg[1] == st.session_state.username else "#334155"}'>
-                        <strong>{msg[1]}</strong> <small>{msg[3]}</small><br>
-                        {msg[2]}
-                    </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.info("No messages yet")
+                st.info("No quality issue records found")
+        else:
+            user_issues = [issue for issue in quality_issues if issue[1] == st.session_state.username]
+            if user_issues:
+                data = []
+                for issue in user_issues:
+                    _, agent, issue_type, timing, mobile, product, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Type of issue": issue_type,
+                        "Timing": timing,
+                        "Mobile number": mobile,
+                        "Product": product
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no quality issue records")
 
-def display_vip_chat_page():
-    """Display the VIP chat page"""
-    if not st.session_state.is_vip and st.session_state.username.lower() != "taha kirri":
-        st.error("Access denied")
-        return
+    elif st.session_state.current_section == "midshift_issues":
+        st.subheader("🔄 Mid-shift Technical Issue")
         
-    st.title("VIP Chat")
-    
-    if check_chat_killswitch():
-        st.error("Chat is currently disabled")
-        return
-    
-    # Message input
-    with st.form("new_vip_message_form"):
-        message = st.text_area("Type your message")
-        if st.form_submit_button("Send"):
-            if message:
-                if send_vip_message(st.session_state.username, message):
-                    st.success("Message sent!")
+        if not is_killswitch_enabled():
+            with st.form("midshift_issue_form"):
+                cols = st.columns(3)
+                issue_type = cols[0].selectbox("Issue Type", [
+                    "Default Not Ready",
+                    "Frozen Workspace",
+                    "Physical Avaya",
+                    "Pc Issue",
+                    "Aaad Tool",
+                    "Disconnected Avaya"
+                ])
+                start_time = cols[1].text_input("Start time (HH:MM)", placeholder="10:00")
+                end_time = cols[2].text_input("End time (HH:MM)", placeholder="10:30")
+                
+                if st.form_submit_button("Submit"):
+                    try:
+                        datetime.strptime(start_time, "%H:%M")
+                        datetime.strptime(end_time, "%H:%M")
+                        add_midshift_issue(
+                            st.session_state.username,
+                            issue_type,
+                            start_time,
+                            end_time
+                        )
+                        st.success("Mid-shift issue reported successfully!")
+                    except ValueError:
+                        st.error("Invalid time format. Please use HH:MM format (e.g., 10:00)")
+        
+        st.subheader("Mid-shift Issue Records")
+        midshift_issues = get_midshift_issues()
+        
+        if st.session_state.role == "admin":
+            if midshift_issues:
+                data = []
+                for issue in midshift_issues:
+                    _, agent, issue_type, start_time, end_time, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Issue Type": issue_type,
+                        "Start time": start_time,
+                        "End Time": end_time
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+                
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name="midshift_issues.csv",
+                    mime="text/csv"
+                )
+                
+                if st.button("Clear All Records"):
+                    clear_midshift_issues()
                     st.rerun()
             else:
-                st.error("Please enter a message")
-    
-    # Display messages
-    st.subheader("Messages")
-    messages = get_vip_messages()
-    
-    if messages:
-        for msg in messages:
-            with st.container():
-                st.markdown(f"""
-                    <div style='padding: 10px; border-radius: 5px; margin: 5px 0;
-                         background-color: {"#1e293b" if msg[1] == st.session_state.username else "#334155"}'>
-                        <strong>{msg[1]}</strong> <small>{msg[3]}</small><br>
-                        {msg[2]}
-                    </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.info("No messages yet")
+                st.info("No mid-shift issue records found")
+        else:
+            user_issues = [issue for issue in midshift_issues if issue[1] == st.session_state.username]
+            if user_issues:
+                data = []
+                for issue in user_issues:
+                    _, agent, issue_type, start_time, end_time, ts = issue
+                    data.append({
+                        "Agent's Name": agent,
+                        "Issue Type": issue_type,
+                        "Start time": start_time,
+                        "End Time": end_time
+                    })
+                
+                df = pd.DataFrame(data)
+                st.dataframe(df)
+            else:
+                st.info("You have no mid-shift issue records")
 
-def display_late_logins_page():
-    """Display the late logins tracking page"""
-    if st.session_state.role != "admin":
-        st.error("Access denied")
-        return
-        
-    st.title("Late Login Tracking")
-    
-    # Add new late login
-    st.subheader("Record Late Login")
-    with st.form("new_late_login_form"):
-        agent_name = st.selectbox(
-            "Agent Name",
-            [user[1] for user in get_all_users() if user[2] == "agent"]
-        )
-        presence_time = st.time_input("Presence Time")
-        login_time = st.time_input("Login Time")
-        reason = st.text_area("Reason")
-        
-        if st.form_submit_button("Record Late Login"):
-            if agent_name and reason:
-                if add_late_login(agent_name, presence_time.strftime("%H:%M"),
-                                login_time.strftime("%H:%M"), reason):
-                    st.success("Late login recorded successfully!")
+    elif st.session_state.current_section == "admin" and st.session_state.role == "admin":
+        if st.session_state.username.lower() == "taha kirri":
+            st.subheader("🚨 System Killswitch")
+            current = is_killswitch_enabled()
+            status = "🔴 ACTIVE" if current else "🟢 INACTIVE"
+            st.write(f"Current Status: {status}")
+            
+            col1, col2 = st.columns(2)
+            if current:
+                if col1.button("Deactivate Killswitch"):
+                    toggle_killswitch(False)
                     st.rerun()
             else:
-                st.error("Please fill in all fields")
-    
-    # View late logins
-    st.subheader("View Late Logins")
-    late_logins = get_late_logins()
-    
-    if late_logins:
-        for login in late_logins:
-            with st.expander(f"{login[1]} - {login[5]}"):
-                st.write(f"**Agent:** {login[1]}")
-                st.write(f"**Presence Time:** {login[2]}")
-                st.write(f"**Login Time:** {login[3]}")
-                st.write(f"**Reason:** {login[4]}")
-                st.write(f"**Recorded:** {login[5]}")
-    else:
-        st.info("No late logins recorded")
-
-def display_quality_issues_page():
-    """Display the quality issues tracking page"""
-    if st.session_state.role != "admin":
-        st.error("Access denied")
-        return
-        
-    st.title("Quality Issues Tracking")
-    
-    # Add new quality issue
-    st.subheader("Record Quality Issue")
-    with st.form("new_quality_issue_form"):
-        agent_name = st.selectbox(
-            "Agent Name",
-            [user[1] for user in get_all_users() if user[2] == "agent"]
-        )
-        issue_type = st.selectbox(
-            "Issue Type",
-            ["Customer Service", "Technical Knowledge", "Communication",
-             "Process Adherence", "Other"]
-        )
-        timing = st.time_input("Time of Issue")
-        mobile_number = st.text_input("Customer Mobile Number")
-        product = st.text_input("Product/Service")
-        
-        if st.form_submit_button("Record Issue"):
-            if agent_name and issue_type and mobile_number and product:
-                if add_quality_issue(agent_name, issue_type, 
-                                   timing.strftime("%H:%M"),
-                                   mobile_number, product):
-                    st.success("Quality issue recorded successfully!")
+                if col1.button("Activate Killswitch"):
+                    toggle_killswitch(True)
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            st.subheader("💬 Chat Killswitch")
+            current_chat = is_chat_killswitch_enabled()
+            chat_status = "🔴 ACTIVE" if current_chat else "🟢 INACTIVE"
+            st.write(f"Current Status: {chat_status}")
+            
+            col1, col2 = st.columns(2)
+            if current_chat:
+                if col1.button("Deactivate Chat Killswitch"):
+                    toggle_chat_killswitch(False)
                     st.rerun()
             else:
-                st.error("Please fill in all fields")
-    
-    # View quality issues
-    st.subheader("View Quality Issues")
-    quality_issues = get_quality_issues()
-    
-    if quality_issues:
-        for issue in quality_issues:
-            with st.expander(f"{issue[1]} - {issue[2]} - {issue[6]}"):
-                st.write(f"**Agent:** {issue[1]}")
-                st.write(f"**Issue Type:** {issue[2]}")
-                st.write(f"**Time:** {issue[3]}")
-                st.write(f"**Mobile Number:** {issue[4]}")
-                st.write(f"**Product:** {issue[5]}")
-                st.write(f"**Recorded:** {issue[6]}")
-    else:
-        st.info("No quality issues recorded")
-
-def display_midshift_issues_page():
-    """Display the midshift issues tracking page"""
-    if st.session_state.role != "admin":
-        st.error("Access denied")
-        return
-        
-    st.title("Midshift Issues Tracking")
-    
-    # Add new midshift issue
-    st.subheader("Record Midshift Issue")
-    with st.form("new_midshift_issue_form"):
-        agent_name = st.selectbox(
-            "Agent Name",
-            [user[1] for user in get_all_users() if user[2] == "agent"]
-        )
-        issue_type = st.selectbox(
-            "Issue Type",
-            ["System Down", "Application Error", "Network Issue",
-             "Hardware Problem", "Other"]
-        )
-        start_time = st.time_input("Start Time")
-        end_time = st.time_input("End Time")
-        
-        if st.form_submit_button("Record Issue"):
-            if agent_name and issue_type:
-                if add_midshift_issue(agent_name, issue_type,
-                                    start_time.strftime("%H:%M"),
-                                    end_time.strftime("%H:%M")):
-                    st.success("Midshift issue recorded successfully!")
+                if col1.button("Activate Chat Killswitch"):
+                    toggle_chat_killswitch(True)
                     st.rerun()
-            else:
-                st.error("Please fill in all fields")
-    
-    # View midshift issues
-    st.subheader("View Midshift Issues")
-    midshift_issues = get_midshift_issues()
-    
-    if midshift_issues:
-        for issue in midshift_issues:
-            with st.expander(f"{issue[1]} - {issue[2]} - {issue[5]}"):
-                st.write(f"**Agent:** {issue[1]}")
-                st.write(f"**Issue Type:** {issue[2]}")
-                st.write(f"**Start Time:** {issue[3]}")
-                st.write(f"**End Time:** {issue[4]}")
-                st.write(f"**Recorded:** {issue[5]}")
-    else:
-        st.info("No midshift issues recorded")
-
-def display_system_settings_page():
-    """Display the system settings page"""
-    if st.session_state.role != "admin":
-        st.error("Access denied")
-        return
+            
+            st.markdown("---")
         
-    st.title("System Settings")
-    
-    # System killswitch
-    st.subheader("System Access Control")
-    killswitch_enabled = is_killswitch_enabled()
-    if st.checkbox("Enable System Maintenance Mode", value=killswitch_enabled):
-        if not killswitch_enabled:
-            if toggle_killswitch(True):
-                st.success("System maintenance mode enabled")
-                st.rerun()
-    else:
-        if killswitch_enabled:
-            if toggle_killswitch(False):
-                st.success("System maintenance mode disabled")
-                st.rerun()
-    
-    # Chat killswitch
-    st.subheader("Chat System Control")
-    chat_killswitch_enabled = is_chat_killswitch_enabled()
-    if st.checkbox("Disable Chat System", value=chat_killswitch_enabled):
-        if not chat_killswitch_enabled:
-            if toggle_chat_killswitch(True):
-                st.success("Chat system disabled")
-                st.rerun()
-    else:
-        if chat_killswitch_enabled:
-            if toggle_chat_killswitch(False):
-                st.success("Chat system enabled")
-                st.rerun()
-    
-    # VIP user management
-    st.subheader("VIP User Management")
-    users = get_all_users()
-    
-    for user in users:
-        is_vip = is_vip_user(user[1])
-        if st.checkbox(f"VIP Status - {user[1]}", value=is_vip):
-            if not is_vip:
-                if set_vip_status(user[1], True):
-                    st.success(f"VIP status granted to {user[1]}")
+        st.subheader("🧹 Data Management")
+        
+        with st.expander("❌ Clear All Requests"):
+            with st.form("clear_requests_form"):
+                st.warning("This will permanently delete ALL requests and their comments!")
+                if st.form_submit_button("Clear All Requests"):
+                    if clear_all_requests():
+                        st.success("All requests deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Mistakes"):
+            with st.form("clear_mistakes_form"):
+                st.warning("This will permanently delete ALL mistakes!")
+                if st.form_submit_button("Clear All Mistakes"):
+                    if clear_all_mistakes():
+                        st.success("All mistakes deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Chat Messages"):
+            with st.form("clear_chat_form"):
+                st.warning("This will permanently delete ALL chat messages!")
+                if st.form_submit_button("Clear All Chat"):
+                    if clear_all_group_messages():
+                        st.success("All chat messages deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All HOLD Images"):
+            with st.form("clear_hold_form"):
+                st.warning("This will permanently delete ALL HOLD images!")
+                if st.form_submit_button("Clear All HOLD Images"):
+                    if clear_hold_images():
+                        st.success("All HOLD images deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Late Logins"):
+            with st.form("clear_late_logins_form"):
+                st.warning("This will permanently delete ALL late login records!")
+                if st.form_submit_button("Clear All Late Logins"):
+                    if clear_late_logins():
+                        st.success("All late login records deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Quality Issues"):
+            with st.form("clear_quality_issues_form"):
+                st.warning("This will permanently delete ALL quality issue records!")
+                if st.form_submit_button("Clear All Quality Issues"):
+                    if clear_quality_issues():
+                        st.success("All quality issue records deleted!")
+                        st.rerun()
+
+        with st.expander("❌ Clear All Mid-shift Issues"):
+            with st.form("clear_midshift_issues_form"):
+                st.warning("This will permanently delete ALL mid-shift issue records!")
+                if st.form_submit_button("Clear All Mid-shift Issues"):
+                    if clear_midshift_issues():
+                        st.success("All mid-shift issue records deleted!")
+                        st.rerun()
+
+        with st.expander("💣 Clear ALL Data"):
+            with st.form("nuclear_form"):
+                st.error("THIS WILL DELETE EVERYTHING IN THE SYSTEM!")
+                if st.form_submit_button("🚨 Execute Full System Wipe"):
+                    try:
+                        clear_all_requests()
+                        clear_all_mistakes()
+                        clear_all_group_messages()
+                        clear_hold_images()
+                        clear_late_logins()
+                        clear_quality_issues()
+                        clear_midshift_issues()
+                        st.success("All system data deleted!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error during deletion: {str(e)}")
+        
+        st.markdown("---")
+        st.subheader("User Management")
+        if not is_killswitch_enabled():
+            # Show add user form to all admins, but with different options
+            with st.form("add_user"):
+                user = st.text_input("Username")
+                pwd = st.text_input("Password", type="password")
+                # Only show role selection to taha kirri, others can only create agent accounts
+                if st.session_state.username.lower() == "taha kirri":
+                    role = st.selectbox("Role", ["agent", "admin"])
+                else:
+                    role = "agent"  # Default role for accounts created by other admins
+                    st.info("Note: New accounts will be created as agent accounts.")
+                
+                if st.form_submit_button("Add User"):
+                    if user and pwd:
+                        add_user(user, pwd, role)
+                        st.rerun()
+        
+        st.subheader("Existing Users")
+        users = get_all_users()
+        
+        # Create a table-like display using columns
+        if st.session_state.username.lower() == "taha kirri":
+            # Full view for taha kirri
+            cols = st.columns([3, 1, 1])
+            cols[0].write("**Username**")
+            cols[1].write("**Role**")
+            cols[2].write("**Action**")
+            
+            for uid, uname, urole in users:
+                cols = st.columns([3, 1, 1])
+                cols[0].write(uname)
+                cols[1].write(urole)
+                if cols[2].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
+                    delete_user(uid)
                     st.rerun()
         else:
-            if is_vip and user[1].lower() != "taha kirri":
-                if set_vip_status(user[1], False):
-                    st.success(f"VIP status removed from {user[1]}")
+            # Limited view for other admins
+            cols = st.columns([4, 1])
+            cols[0].write("**Username**")
+            cols[1].write("**Action**")
+            
+            for uid, uname, urole in users:
+                cols = st.columns([4, 1])
+                cols[0].write(uname)
+                if cols[1].button("Delete", key=f"del_{uid}") and not is_killswitch_enabled():
+                    delete_user(uid)
                     st.rerun()
+
+        st.subheader("⭐ VIP User Management")
+        
+        # Get all users
+        users = get_all_users()
+        
+        with st.form("vip_management"):
+            selected_user = st.selectbox(
+                "Select User",
+                [user[1] for user in users],
+                format_func=lambda x: f"{x} {'⭐' if is_vip_user(x) else ''}"
+            )
+            
+            if selected_user:
+                current_vip = is_vip_user(selected_user)
+                make_vip = st.checkbox("VIP Status", value=current_vip)
+                
+                if st.form_submit_button("Update VIP Status"):
+                    if set_vip_status(selected_user, make_vip):
+                        st.success(f"Updated VIP status for {selected_user}")
+                        # Force database refresh
+                        conn = get_db_connection()
+                        try:
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT is_vip FROM users WHERE username = ?", (selected_user,))
+                            new_status = cursor.fetchone()
+                            if new_status:
+                                st.write(f"New VIP status: {'VIP' if new_status[0] else 'Regular User'}")
+                        finally:
+                            conn.close()
+                        st.rerun()
+        
+        st.markdown("---")
+
+    elif st.session_state.current_section == "breaks":
+        if st.session_state.role == "admin":
+            admin_break_dashboard()
+        else:
+            agent_break_dashboard()
+
+    elif st.session_state.current_section == "vip_management" and st.session_state.username.lower() == "taha kirri":
+        st.title("⭐ VIP Management")
+        
+        # Get all users
+        users = get_all_users()
+        
+        # Create columns for better layout
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            # Show all users with their current VIP status
+            st.markdown("### Current VIP Status")
+            user_data = []
+            for user_id, username, role in users:
+                is_vip = is_vip_user(username)
+                user_data.append({
+                    "Username": username,
+                    "Role": role,
+                    "Status": "⭐ VIP" if is_vip else "Regular User"
+                })
+            
+            df = pd.DataFrame(user_data)
+            st.dataframe(df, use_container_width=True)
+        
+        with col2:
+            # VIP management form
+            with st.form("vip_management_form"):
+                st.write("### Update VIP Status")
+                selected_user = st.selectbox(
+                    "Select User",
+                    [user[1] for user in users if user[1].lower() != "taha kirri"],
+                    format_func=lambda x: f"{x} {'⭐' if is_vip_user(x) else ''}"
+                )
+                
+                if selected_user:
+                    current_vip = is_vip_user(selected_user)
+                    make_vip = st.checkbox("Grant VIP Access", value=current_vip)
+                    
+                    if st.form_submit_button("Update"):
+                        if set_vip_status(selected_user, make_vip):
+                            st.success(f"Updated VIP status for {selected_user}")
+                            st.rerun()
+        
+        # Add VIP Statistics
+        st.markdown("---")
+        st.subheader("VIP Statistics")
+        
+        total_users = len(users)
+        vip_users = sum(1 for user in users if is_vip_user(user[1]))
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Users", total_users)
+        with col2:
+            st.metric("VIP Users", vip_users)
+        with col3:
+            st.metric("Regular Users", total_users - vip_users)
+        
+        # VIP Chat Overview
+        st.markdown("---")
+        st.subheader("VIP Chat Overview")
+        vip_messages = get_vip_messages()
+        if vip_messages:
+            message_data = []
+            for msg in vip_messages[:10]:  # Show last 10 messages
+                msg_id, sender, message, ts, mentions = msg
+                message_data.append({
+                    "Time": ts,
+                    "Sender": sender,
+                    "Message": message
+                })
+            st.dataframe(pd.DataFrame(message_data))
+        else:
+            st.info("No VIP messages yet")
+
+def get_new_messages(last_check_time):
+    """Get new messages since last check"""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, sender, message, timestamp, mentions 
+            FROM group_messages 
+            WHERE timestamp > ?
+            ORDER BY timestamp DESC
+        """, (last_check_time,))
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def handle_message_check():
+    if not st.session_state.authenticated:
+        return {"new_messages": False, "messages": []}
     
-    # Data management
-    st.subheader("Data Management")
-    col1, col2, col3, col4 = st.columns(4)
+    current_time = datetime.now()
+    if 'last_message_check' not in st.session_state:
+        st.session_state.last_message_check = current_time
     
-    with col1:
-        if st.button("Clear All Requests"):
-            if clear_all_requests():
-                st.success("All requests cleared")
-                st.rerun()
+    new_messages = get_new_messages(st.session_state.last_message_check.strftime("%Y-%m-%d %H:%M:%S"))
+    st.session_state.last_message_check = current_time
     
-    with col2:
-        if st.button("Clear All Mistakes"):
-            if clear_all_mistakes():
-                st.success("All mistakes cleared")
-                st.rerun()
-    
-    with col3:
-        if st.button("Clear All Messages"):
-            if clear_all_group_messages():
-                st.success("All messages cleared")
-                st.rerun()
-    
-    with col4:
-        if st.button("Clear All Images"):
-            if clear_hold_images():
-                st.success("All images cleared")
-                st.rerun()
+    if new_messages:
+        messages_data = []
+        for msg in new_messages:
+            msg_id, sender, message, ts, mentions = msg
+            if sender != st.session_state.username:  # Don't notify about own messages
+                mentions_list = mentions.split(',') if mentions else []
+                if st.session_state.username in mentions_list:
+                    message = f"@{st.session_state.username} {message}"
+                messages_data.append({
+                    "sender": sender,
+                    "message": message
+                })
+        return {"new_messages": bool(messages_data), "messages": messages_data}
+    return {"new_messages": False, "messages": []}
 
 if __name__ == "__main__":
-    main()
+    inject_custom_css()
+    
+    # Add route for message checking
+    if st.query_params.get("check_messages"):
+        st.json(handle_message_check())
+        st.stop()
+    
+    st.write("Request Management System")
