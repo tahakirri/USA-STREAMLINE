@@ -38,125 +38,25 @@ def init_db():
     try:
         cursor = conn.cursor()
         
-        # List of table creation statements
-        table_statements = [
-            # System settings table
-            """CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                killswitch_enabled INTEGER DEFAULT 0,
-                chat_killswitch_enabled INTEGER DEFAULT 0
-            )""",
-            
-            # Users table
-            """CREATE TABLE IF NOT EXISTS users (
+        # Create tables if they don't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE,
                 password TEXT,
                 role TEXT CHECK(role IN ('agent', 'admin')),
                 is_vip INTEGER DEFAULT 0
-            )""",
-            
-            # Requests table
-            """CREATE TABLE IF NOT EXISTS requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                request_type TEXT,
-                identifier TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                completed INTEGER DEFAULT 0
-            )""",
-            
-            # Request comments table
-            """CREATE TABLE IF NOT EXISTS request_comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                request_id INTEGER,
-                user TEXT,
-                comment TEXT,
-                timestamp TEXT,
-                FOREIGN KEY (request_id) REFERENCES requests (id)
-            )""",
-            
-            # Mistakes table
-            """CREATE TABLE IF NOT EXISTS mistakes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                team_leader TEXT,
-                agent_name TEXT,
-                ticket_id TEXT,
-                error_description TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Group messages table
-            """CREATE TABLE IF NOT EXISTS group_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT
-            )""",
-            
-            # VIP messages table
-            """CREATE TABLE IF NOT EXISTS vip_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender TEXT,
-                message TEXT,
-                timestamp TEXT,
-                mentions TEXT
-            )""",
-            
-            # Hold images table
-            """CREATE TABLE IF NOT EXISTS hold_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uploader TEXT,
-                image_data BLOB,
-                timestamp TEXT
-            )""",
-            
-            # Late logins table
-            """CREATE TABLE IF NOT EXISTS late_logins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                presence_time TEXT,
-                login_time TEXT,
-                reason TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Quality issues table
-            """CREATE TABLE IF NOT EXISTS quality_issues (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                issue_type TEXT,
-                timing TEXT,
-                mobile_number TEXT,
-                product TEXT,
-                timestamp TEXT
-            )""",
-            
-            # Midshift issues table
-            """CREATE TABLE IF NOT EXISTS midshift_issues (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                agent_name TEXT,
-                issue_type TEXT,
-                start_time TEXT,
-                end_time TEXT,
-                timestamp TEXT
-            )"""
-        ]
+            )
+        """)
         
-        # Create all tables
-        for statement in table_statements:
-            try:
-                cursor.execute(statement)
-            except Exception as e:
-                print(f"Error creating table: {str(e)}")
-                raise
-        
-        # Initialize system settings
         cursor.execute("""
-            INSERT OR IGNORE INTO system_settings (id, killswitch_enabled, chat_killswitch_enabled) 
-            VALUES (1, 0, 0)
+            CREATE TABLE IF NOT EXISTS vip_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                message TEXT,
+                timestamp TEXT,
+                mentions TEXT
+            )
         """)
         
         # Create default admin account
@@ -175,13 +75,10 @@ def init_db():
         ]
         
         for username, password in admin_accounts:
-            try:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                    VALUES (?, ?, ?, ?)
-                """, (username, hash_password(password), "admin", 0))
-            except Exception as e:
-                print(f"Error creating admin account for {username}: {str(e)}")
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                VALUES (?, ?, ?, ?)
+            """, (username, hash_password(password), "admin", 0))
         
         # Create agent accounts
         agents = [
@@ -233,13 +130,10 @@ def init_db():
         ]
         
         for agent_name, workspace_id in agents:
-            try:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO users (username, password, role, is_vip) 
-                    VALUES (?, ?, ?, ?)
-                """, (agent_name, hash_password(workspace_id), "agent", 0))
-            except Exception as e:
-                print(f"Error creating agent account for {agent_name}: {str(e)}")
+            cursor.execute("""
+                INSERT OR IGNORE INTO users (username, password, role, is_vip) 
+                VALUES (?, ?, ?, ?)
+            """, (agent_name, hash_password(workspace_id), "agent", 0))
         
         # Ensure taha kirri has VIP status
         cursor.execute("""
@@ -247,9 +141,6 @@ def init_db():
         """)
         
         conn.commit()
-    except Exception as e:
-        print(f"Database initialization error: {str(e)}")
-        raise
     finally:
         conn.close()
 
