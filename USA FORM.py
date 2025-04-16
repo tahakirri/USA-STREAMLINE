@@ -14,9 +14,10 @@ import json
 # --------------------------
 
 def get_db_connection():
-    """Create and return a database connection."""
-    os.makedirs("data", exist_ok=True)
-    return sqlite3.connect("data/requests.db")
+    import streamlit as st
+    db_path = os.path.join(st.__path__[0], "data", "requests.db")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    return sqlite3.connect(db_path)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
